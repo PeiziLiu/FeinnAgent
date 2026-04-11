@@ -298,20 +298,14 @@ Intelligence Features
 
 ## 附录
 
-### A. 参考资源
+### 参考资源
 
 - [OpenAI API](https://platform.openai.com/docs)
 - [Anthropic API](https://docs.anthropic.com/)
 - [MCP Protocol](https://modelcontextprotocol.io/)
 - [FastAPI](https://fastapi.tiangolo.com/)
 
-### B. 相关项目
-
-- [CheetahClaws](https://github.com/fishdoll/cheetahclaws)
-- [Claude Code](https://github.com/anthropics/claude-code)
-- [Hermes Agent](https://github.com/fishdoll/hermes-agent)
-
-### C. 修订历史
+### B. 修订历史
 
 | 版本 | 日期 | 作者 | 变更 |
 |------|------|------|------|

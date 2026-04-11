@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "feinn-agent"
 version = "0.1.0"
 description = "Enterprise-grade async AI agent framework with multi-concurrency support"
+license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.42.0",
