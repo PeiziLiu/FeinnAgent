@@ -10,6 +10,11 @@ from typing import Any
 
 from ..types import ToolDef
 from .registry import register
+from .skills import SKILL_LIST_TOOL_DEF, SKILL_TOOL_DEF
+
+# Register skill tools
+register(SKILL_TOOL_DEF)
+register(SKILL_LIST_TOOL_DEF)
 
 # ── Read ────────────────────────────────────────────────────────────
 

@@ -12,6 +12,7 @@ Quick start:
 """
 
 from .agent import FeinnAgent
+from .skill import SkillDef, find_skill, load_skills
 from .types import (
     AgentDone,
     AgentEvent,
@@ -32,6 +33,7 @@ __all__ = [
     "AgentEvent",
     "AgentState",
     "PermissionMode",
+    "SkillDef",
     "TextChunk",
     "ThinkingChunk",
     "ToolCall",
@@ -39,6 +41,8 @@ __all__ = [
     "ToolStart",
     "ToolDef",
     "TurnDone",
+    "find_skill",
+    "load_skills",
 ]
 
 __version__ = "0.1.0"
