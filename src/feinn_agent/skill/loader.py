@@ -10,38 +10,38 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class SkillDef:
-    """Skill definition parsed from markdown file.
+class SkillTemplate:
+    """Reusable workflow template defined in markdown with YAML frontmatter.
 
     Attributes:
-        name: Unique skill identifier
-        description: Short description of what the skill does
-        triggers: List of trigger phrases (e.g., ["/commit", "commit changes"])
-        tools: List of allowed tools for this skill
-        prompt: Full prompt body (after frontmatter)
-        file_path: Source file path
-        when_to_use: When the agent should auto-invoke this skill
-        argument_hint: Hint for arguments (e.g., "[branch] [description]")
-        arguments: List of named argument names
-        model: Optional model override
-        user_invocable: Whether this skill appears in SkillList
-        context: Execution context - "inline" or "fork" (sub-agent)
-        source: Source type - "user", "project", or "builtin"
+        skill_id: Unique identifier for the template
+        summary: Brief description of the workflow
+        activators: Trigger phrases that invoke this skill (e.g., ["/commit"])
+        allowed_tools: Tools this skill can use (empty = all tools)
+        template: The prompt template body (after frontmatter)
+        origin: Path to source file
+        usage_context: When the agent should suggest this skill
+        param_guide: Hint for parameters (e.g., "[branch] [message]")
+        param_names: Named parameter placeholders
+        preferred_model: Optional model override
+        visible_to_user: Whether shown in skill listings
+        exec_mode: "direct" (current context) or "isolated" (sub-agent)
+        origin_type: "builtin", "user", or "workspace"
     """
 
-    name: str
-    description: str
-    triggers: list[str] = field(default_factory=list)
-    tools: list[str] = field(default_factory=list)
-    prompt: str = ""
-    file_path: str = ""
-    when_to_use: str = ""
-    argument_hint: str = ""
-    arguments: list[str] = field(default_factory=list)
-    model: str = ""
-    user_invocable: bool = True
-    context: str = "inline"  # "inline" or "fork"
-    source: str = "user"  # "user", "project", or "builtin"
+    skill_id: str
+    summary: str
+    activators: list[str] = field(default_factory=list)
+    allowed_tools: list[str] = field(default_factory=list)
+    template: str = ""
+    origin: str = ""
+    usage_context: str = ""
+    param_guide: str = ""
+    param_names: list[str] = field(default_factory=list)
+    preferred_model: str = ""
+    visible_to_user: bool = True
+    exec_mode: str = "direct"  # "direct" or "isolated"
+    origin_type: str = "user"  # "builtin", "user", or "workspace"
 
 
 # ── Directory paths ────────────────────────────────────────────────────────
@@ -80,20 +80,20 @@ def _parse_list_field(value: str) -> list[str]:
 # ── Single-file parser ─────────────────────────────────────────────────────
 
 
-def _parse_skill_file(path: Path, source: str = "user") -> SkillDef | None:
-    """Parse a markdown file with ``---`` frontmatter into a SkillDef.
+def _parse_skill_file(path: Path, origin_type: str = "user") -> SkillTemplate | None:
+    """Parse a markdown file with ``---`` frontmatter into a SkillTemplate.
 
     Frontmatter fields:
-        name, description, triggers, tools / allowed-tools,
-        when_to_use, argument-hint, arguments, model,
-        user-invocable, context
+        id, summary, activators, tools,
+        usage-context, param-guide, param-names, model,
+        visible, exec-mode
 
     Args:
         path: Path to the markdown file
-        source: Source type ("user", "project", or "builtin")
+        origin_type: Source type ("user", "workspace", or "builtin")
 
     Returns:
-        Parsed SkillDef or None if invalid
+        Parsed SkillTemplate or None if invalid
     """
     try:
         text = path.read_text(encoding="utf-8")
@@ -109,7 +109,7 @@ def _parse_skill_file(path: Path, source: str = "user") -> SkillDef | None:
         return None
 
     frontmatter_raw = parts[1].strip()
-    prompt = parts[2].strip()
+    template_body = parts[2].strip()
 
     fields: dict[str, str] = {}
     for line in frontmatter_raw.splitlines():
@@ -119,161 +119,171 @@ def _parse_skill_file(path: Path, source: str = "user") -> SkillDef | None:
         key, _, val = line.partition(":")
         fields[key.strip().lower()] = val.strip()
 
-    name = fields.get("name", "")
-    if not name:
-        logger.warning("Skill file %s missing 'name' field", path)
+    # Support both old 'name' and new 'id' field
+    skill_id = fields.get("id", fields.get("name", ""))
+    if not skill_id:
+        logger.warning("Skill file %s missing 'id' or 'name' field", path)
         return None
 
-    # allowed-tools wins over tools if present
-    tools_raw = fields.get("allowed-tools", fields.get("tools", ""))
-    tools = _parse_list_field(tools_raw) if tools_raw else []
+    # Parse tools list
+    tools_raw = fields.get("tools", "")
+    allowed_tools = _parse_list_field(tools_raw) if tools_raw else []
 
-    triggers_raw = fields.get("triggers", "")
-    triggers = _parse_list_field(triggers_raw) if triggers_raw else [f"/{name}"]
+    # Parse activators (triggers)
+    activators_raw = fields.get("activators", fields.get("triggers", ""))
+    activators = _parse_list_field(activators_raw) if activators_raw else [f"/{skill_id}"]
 
-    arguments_raw = fields.get("arguments", "")
-    arguments = _parse_list_field(arguments_raw) if arguments_raw else []
+    # Parse parameter names
+    param_names_raw = fields.get("param-names", fields.get("arguments", ""))
+    param_names = _parse_list_field(param_names_raw) if param_names_raw else []
 
-    user_invocable_raw = fields.get("user-invocable", "true")
-    user_invocable = user_invocable_raw.lower() not in ("false", "0", "no")
+    # Parse visibility flag
+    visible_raw = fields.get("visible", fields.get("user-invocable", "true"))
+    visible_to_user = visible_raw.lower() not in ("false", "0", "no")
 
-    context = fields.get("context", "inline").strip().lower()
-    if context not in ("inline", "fork"):
-        context = "inline"
+    # Parse execution mode
+    exec_mode = fields.get("exec-mode", fields.get("context", "direct")).strip().lower()
+    if exec_mode not in ("direct", "isolated"):
+        exec_mode = "direct"
+    # Map old values to new ones
+    if exec_mode == "inline":
+        exec_mode = "direct"
+    elif exec_mode == "fork":
+        exec_mode = "isolated"
 
-    return SkillDef(
-        name=name,
-        description=fields.get("description", ""),
-        triggers=triggers,
-        tools=tools,
-        prompt=prompt,
-        file_path=str(path),
-        when_to_use=fields.get("when_to_use", ""),
-        argument_hint=fields.get("argument-hint", ""),
-        arguments=arguments,
-        model=fields.get("model", ""),
-        user_invocable=user_invocable,
-        context=context,
-        source=source,
+    return SkillTemplate(
+        skill_id=skill_id,
+        summary=fields.get("summary", fields.get("description", "")),
+        activators=activators,
+        allowed_tools=allowed_tools,
+        template=template_body,
+        origin=str(path),
+        usage_context=fields.get("usage-context", fields.get("when_to_use", "")),
+        param_guide=fields.get("param-guide", fields.get("argument-hint", "")),
+        param_names=param_names,
+        preferred_model=fields.get("model", ""),
+        visible_to_user=visible_to_user,
+        exec_mode=exec_mode,
+        origin_type=origin_type,
     )
 
 
 # ── Registry of built-in skills (registered by builtin.py) ────────────────
 
-_BUILTIN_SKILLS: list[SkillDef] = []
+_BUILTIN_TEMPLATES: list[SkillTemplate] = []
 
 
-def register_builtin_skill(skill: SkillDef) -> None:
-    """Register a built-in skill.
+def register_builtin_template(template: SkillTemplate) -> None:
+    """Register a built-in skill template.
 
     Called by builtin.py during module initialization.
     """
-    _BUILTIN_SKILLS.append(skill)
+    _BUILTIN_TEMPLATES.append(template)
 
 
 # ── Load all skills ────────────────────────────────────────────────────────
 
 
-def load_skills(include_builtins: bool = True) -> list[SkillDef]:
-    """Load all skills from disk and builtins.
+def load_skills(include_builtins: bool = True) -> list[SkillTemplate]:
+    """Load all skill templates from disk and builtins.
 
-    Skills are deduplicated by name with priority:
-    project-level > user-level > builtin
+    Templates are deduplicated by skill_id with priority:
+    workspace-level > user-level > builtin
 
     Args:
-        include_builtins: Whether to include built-in skills
+        include_builtins: Whether to include built-in templates
 
     Returns:
-        List of unique SkillDef objects
+        List of unique SkillTemplate objects
     """
-    seen: dict[str, SkillDef] = {}
+    seen: dict[str, SkillTemplate] = {}
 
     # Builtins go in first (lowest priority)
     if include_builtins:
-        for sk in _BUILTIN_SKILLS:
-            seen[sk.name] = sk
+        for tmpl in _BUILTIN_TEMPLATES:
+            seen[tmpl.skill_id] = tmpl
 
-    # User-level next, project-level last (highest priority)
+    # User-level next, workspace-level last (highest priority)
     skill_paths = _get_skill_paths()
     for i, skill_dir in enumerate(reversed(skill_paths)):
-        src = "project" if i == 0 else "user"
+        src = "workspace" if i == 0 else "user"
         if not skill_dir.is_dir():
             continue
         for md_file in sorted(skill_dir.glob("*.md")):
-            skill = _parse_skill_file(md_file, source=src)
-            if skill:
-                seen[skill.name] = skill
-                logger.debug("Loaded skill: %s from %s", skill.name, md_file)
+            template = _parse_skill_file(md_file, origin_type=src)
+            if template:
+                seen[template.skill_id] = template
+                logger.debug("Loaded skill template: %s from %s", template.skill_id, md_file)
 
     return list(seen.values())
 
 
-def find_skill(query: str) -> SkillDef | None:
-    """Find a skill by trigger match.
+def find_skill(query: str) -> SkillTemplate | None:
+    """Find a skill template by activator match.
 
-    Matches the first word of the query against skill triggers.
+    Matches the first word of the query against template activators.
 
     Args:
         query: Query string (e.g., "/commit fix the bug")
 
     Returns:
-        Matching SkillDef or None
+        Matching SkillTemplate or None
     """
     query = query.strip()
     if not query:
         return None
 
     first_word = query.split()[0]
-    for skill in load_skills():
-        for trigger in skill.triggers:
-            if first_word == trigger:
-                return skill
-            if trigger.startswith(first_word + " "):
-                return skill
+    for template in load_skills():
+        for activator in template.activators:
+            if first_word == activator:
+                return template
+            if activator.startswith(first_word + " "):
+                return template
     return None
 
 
-def get_skill_by_name(name: str) -> SkillDef | None:
-    """Find a skill by exact name match.
+def get_skill_by_name(skill_id: str) -> SkillTemplate | None:
+    """Find a skill template by exact skill_id match.
 
     Args:
-        name: Skill name
+        skill_id: Skill identifier
 
     Returns:
-        Matching SkillDef or None
+        Matching SkillTemplate or None
     """
-    for skill in load_skills():
-        if skill.name == name:
-            return skill
+    for template in load_skills():
+        if template.skill_id == skill_id:
+            return template
     return None
 
 
-# ── Argument substitution ─────────────────────────────────────────────────
+# ── Parameter substitution ─────────────────────────────────────────────────
 
 
-def substitute_arguments(prompt: str, args: str, arg_names: list[str]) -> str:
-    """Replace $ARGUMENTS and named placeholders in prompt.
+def render_template(template: str, params: str, param_names: list[str]) -> str:
+    """Replace $PARAMS and named placeholders in template.
 
     Replaces:
-        - $ARGUMENTS → entire args string
-        - $ARG_NAME → corresponding positional argument
+        - $PARAMS → entire params string
+        - $PARAM_NAME → corresponding positional parameter
 
     Args:
-        prompt: Template prompt with placeholders
-        args: Raw argument string from user
-        arg_names: List of named argument names
+        template: Template string with placeholders
+        params: Raw parameter string from user
+        param_names: List of named parameter names
 
     Returns:
-        Rendered prompt with substitutions
+        Rendered template with substitutions
     """
-    # Always substitute $ARGUMENTS
-    result = prompt.replace("$ARGUMENTS", args)
+    # Always substitute $PARAMS (backward compat with $ARGUMENTS)
+    result = template.replace("$PARAMS", params).replace("$ARGUMENTS", params)
 
-    # Named args: split by whitespace
-    arg_values = args.split()
-    for i, arg_name in enumerate(arg_names):
-        placeholder = f"${arg_name.upper()}"
-        value = arg_values[i] if i < len(arg_values) else ""
+    # Named params: split by whitespace
+    param_values = params.split()
+    for i, param_name in enumerate(param_names):
+        placeholder = f"${param_name.upper()}"
+        value = param_values[i] if i < len(param_values) else ""
         result = result.replace(placeholder, value)
 
     return result

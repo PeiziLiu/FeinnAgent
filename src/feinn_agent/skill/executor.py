@@ -1,4 +1,4 @@
-"""Skill execution: inline (current conversation) or forked (sub-agent)."""
+"""Skill template execution: direct (current context) or isolated (sub-agent)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
-from .loader import SkillDef, substitute_arguments
+from .loader import SkillTemplate, render_template
 
 if TYPE_CHECKING:
     from ..agent import FeinnAgent
@@ -16,44 +16,44 @@ logger = logging.getLogger(__name__)
 
 
 async def execute_skill(
-    skill: SkillDef,
-    args: str,
+    template: SkillTemplate,
+    params: str,
     agent: FeinnAgent,
     config: dict[str, Any],
 ) -> AsyncIterator[AgentEvent]:
-    """Execute a skill.
+    """Execute a skill template.
 
-    If skill.context == "fork", runs as an isolated sub-agent.
-    Otherwise (inline), injects the rendered prompt into the current agent loop.
+    If template.exec_mode == "isolated", runs as an isolated sub-agent.
+    Otherwise (direct), injects the rendered prompt into the current agent loop.
 
     Args:
-        skill: SkillDef to execute
-        args: Raw argument string from user (after the trigger word)
+        template: SkillTemplate to execute
+        params: Raw parameter string from user (after the activator)
         agent: Parent agent instance
         config: Configuration dict
 
     Yields:
         Agent events (TextChunk, ToolStart, ToolEnd, AgentDone, etc.)
     """
-    rendered = substitute_arguments(skill.prompt, args, skill.arguments)
-    message = f"[Skill: {skill.name}]\n\n{rendered}"
+    rendered = render_template(template.template, params, template.param_names)
+    message = f"[Skill: {template.skill_id}]\n\n{rendered}"
 
-    logger.info("Executing skill: %s (context=%s)", skill.name, skill.context)
+    logger.info("Executing skill template: %s (mode=%s)", template.skill_id, template.exec_mode)
 
-    if skill.context == "fork":
-        async for event in _execute_forked(skill, message, agent, config):
+    if template.exec_mode == "isolated":
+        async for event in _execute_isolated(template, message, agent, config):
             yield event
     else:
-        async for event in _execute_inline(message, agent, config):
+        async for event in _execute_direct(message, agent, config):
             yield event
 
 
-async def _execute_inline(
+async def _execute_direct(
     message: str,
     agent: FeinnAgent,
     config: dict[str, Any],
 ) -> AsyncIterator[AgentEvent]:
-    """Run skill prompt inline in the current conversation.
+    """Run skill template directly in the current conversation.
 
     Args:
         message: Rendered skill message
@@ -63,14 +63,14 @@ async def _execute_inline(
     Yields:
         Agent events
     """
-    # For inline execution, we just run the agent with the skill message
-    # The skill's system prompt is already part of the agent's context
+    # For direct execution, we just run the agent with the skill message
+    # The template's system prompt is already part of the agent's context
     async for event in agent.run(message):
         yield event
 
 
-async def _execute_forked(
-    skill: SkillDef,
+async def _execute_isolated(
+    template: SkillTemplate,
     message: str,
     parent_agent: FeinnAgent,
     config: dict[str, Any],
@@ -78,7 +78,7 @@ async def _execute_forked(
     """Run skill as an isolated sub-agent (separate conversation context).
 
     Args:
-        skill: SkillDef to execute
+        template: SkillTemplate being executed
         message: Rendered skill message
         parent_agent: Parent agent instance
         config: Configuration dict
@@ -94,14 +94,14 @@ async def _execute_forked(
     sub_config["_depth"] = config.get("_depth", 0) + 1
 
     # Apply model override if specified
-    if skill.model:
-        sub_config["model"] = skill.model
-        logger.debug("Skill %s using model override: %s", skill.name, skill.model)
+    if template.preferred_model:
+        sub_config["model"] = template.preferred_model
+        logger.debug("Skill %s using model override: %s", template.skill_id, template.preferred_model)
 
-    # Restrict tools if skill specifies allowed-tools
-    if skill.tools:
-        sub_config["_allowed_tools"] = skill.tools
-        logger.debug("Skill %s restricted to tools: %s", skill.name, skill.tools)
+    # Restrict tools if template specifies allowed tools
+    if template.allowed_tools:
+        sub_config["_allowed_tools"] = template.allowed_tools
+        logger.debug("Skill %s restricted to tools: %s", template.skill_id, template.allowed_tools)
 
     # Create fresh state (no shared history)
     sub_state = AgentState()

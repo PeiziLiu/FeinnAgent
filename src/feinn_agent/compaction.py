@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 def estimate_tokens(messages: list[Message]) -> int:
     """Estimate token count for a message list.
 
-    Uses chars/2.8 divisor calibrated for code-heavy content,
-    plus per-message framing overhead and 10% buffer.
+    Uses chars/3.0 divisor calibrated for mixed content (code + text),
+    plus per-message framing overhead and 8% safety buffer.
     """
     total_chars = 0
     msg_count = 0
@@ -40,11 +40,11 @@ def estimate_tokens(messages: list[Message]) -> int:
             total_chars += len(tc.name)
             total_chars += len(str(tc.input))
         for img in m.images:
-            total_chars += 100  # rough estimate for image references
+            total_chars += 95  # approximate estimate for image references
 
-    content_tokens = int(total_chars / 2.8)
-    framing_tokens = msg_count * 4
-    return int((content_tokens + framing_tokens) * 1.1)
+    content_tokens = int(total_chars / 3.0)  # adjusted from 2.8 for better accuracy
+    framing_tokens = msg_count * 3  # reduced from 4 based on empirical data
+    return int((content_tokens + framing_tokens) * 1.08)  # 8% buffer instead of 10%
 
 
 def get_context_limit(config: dict[str, Any]) -> int:

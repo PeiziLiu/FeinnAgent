@@ -1,16 +1,16 @@
-"""FeinnAgent Skill system — reusable prompt templates with triggers and arguments.
+"""FeinnAgent Skill system — reusable prompt templates with activators and parameters.
 
-Skills are markdown files with YAML frontmatter that define reusable workflows.
-They can be invoked by triggers (e.g., "/commit") or via the Skill tool.
+Skill templates are markdown files with YAML frontmatter that define reusable workflows.
+They can be invoked by activators (e.g., "/commit") or via the Skill tool.
 
-Example skill file (`.feinn/skills/commit.md`):
+Example skill template file (`.feinn/skills/commit.md`):
     ---
-    name: commit
-    description: Create a well-structured git commit
-    triggers: ["/commit", "commit changes"]
+    id: commit
+    summary: Create a well-structured git commit
+    activators: ["/commit", "commit changes"]
     tools: ["Bash", "Read"]
-    when_to_use: "Use when user wants to commit changes"
-    argument_hint: "[optional context]"
+    usage-context: "Use when user wants to commit changes"
+    param-guide: "[optional context]"
     ---
 
     Review the git state and create a commit:
@@ -18,18 +18,23 @@ Example skill file (`.feinn/skills/commit.md`):
     2. Analyze changes and write a concise commit message
     3. Execute `git commit -m "<message>"`
 
-    User context: $ARGUMENTS
+    User context: $PARAMS
 """
 
 from .builtin import register_builtin_skills
 from .executor import execute_skill
-from .loader import SkillDef, find_skill, load_skills, substitute_arguments
+from .loader import (
+    SkillTemplate,
+    find_skill,
+    load_skills,
+    render_template,
+)
 
 __all__ = [
-    "SkillDef",
+    "SkillTemplate",
     "load_skills",
     "find_skill",
-    "substitute_arguments",
+    "render_template",
     "execute_skill",
     "register_builtin_skills",
 ]

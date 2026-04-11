@@ -1,12 +1,12 @@
-"""Built-in skills that ship with FeinnAgent."""
+"""Built-in skill templates that ship with FeinnAgent."""
 
 from __future__ import annotations
 
-from .loader import SkillDef, register_builtin_skill
+from .loader import SkillTemplate, register_builtin_template
 
 # ── /commit ────────────────────────────────────────────────────────────────
 
-_COMMIT_PROMPT = """\
+_COMMIT_TEMPLATE = """\
 Review the current git state and create a well-structured commit.
 
 ## Steps
@@ -29,18 +29,18 @@ Review the current git state and create a well-structured commit.
 - Never commit files that likely contain secrets (.env, credentials, keys).
 - Prefer imperative mood in the title: "Add X", "Fix Y", "Refactor Z".
 
-User context: $ARGUMENTS
+User context: $PARAMS
 """
 
 # ── /review ────────────────────────────────────────────────────────────────
 
-_REVIEW_PROMPT = """\
+_REVIEW_TEMPLATE = """\
 Review the code or pull request and provide structured feedback.
 
 ## Steps
 
 1. Understand the scope:
-   - If a PR number or URL is given in $ARGUMENTS, use `gh pr view $ARGUMENTS --patch` to get the diff.
+   - If a PR number or URL is given in $PARAMS, use `gh pr view $PARAMS --patch` to get the diff.
    - Otherwise, use `git diff main...HEAD` (or `git diff HEAD~1`) for local changes.
 2. Analyze the diff:
    - Correctness: Are there bugs, edge cases, or logic errors?
@@ -64,18 +64,18 @@ Review the code or pull request and provide structured feedback.
    ```
 4. If changes are needed, list specific file:line references.
 
-User context: $ARGUMENTS
+User context: $PARAMS
 """
 
 # ── /explain ───────────────────────────────────────────────────────────────
 
-_EXPLAIN_PROMPT = """\
+_EXPLAIN_TEMPLATE = """\
 Explain the code in detail, suitable for a developer learning the codebase.
 
 ## Steps
 
 1. Identify the target:
-   - If $ARGUMENTS contains a file path, read that file
+   - If $PARAMS contains a file path, read that file
    - If it contains a function/class name, search for it
    - If no argument given, ask the user what to explain
 
@@ -91,18 +91,18 @@ Explain the code in detail, suitable for a developer learning the codebase.
    - Use analogies where helpful
    - Mention any gotchas or edge cases
 
-User context: $ARGUMENTS
+User context: $PARAMS
 """
 
 # ── /test ─────────────────────────────────────────────────────────────────
 
-_TEST_PROMPT = """\
+_TEST_TEMPLATE = """\
 Generate comprehensive tests for the specified code.
 
 ## Steps
 
 1. Identify the target:
-   - If $ARGUMENTS contains a file path, read that file
+   - If $PARAMS contains a file path, read that file
    - If it contains a function/class name, search for it
 
 2. Analyze the code to understand:
@@ -119,18 +119,18 @@ Generate comprehensive tests for the specified code.
 
 4. Write tests to appropriate test file or create new one
 
-User context: $ARGUMENTS
+User context: $PARAMS
 """
 
 # ── /doc ──────────────────────────────────────────────────────────────────
 
-_DOC_PROMPT = """\
+_DOC_TEMPLATE = """\
 Generate or update documentation for the specified code.
 
 ## Steps
 
 1. Identify the target:
-   - If $ARGUMENTS contains a file path, read that file
+   - If $PARAMS contains a file path, read that file
    - If it contains a function/class name, search for it
 
 2. Analyze the code:
@@ -145,94 +145,102 @@ Generate or update documentation for the specified code.
    - Create/update README if needed
    - Add usage examples
 
-User context: $ARGUMENTS
+User context: $PARAMS
 """
 
 
 def register_builtin_skills() -> None:
-    """Register all built-in skills.
+    """Register all built-in skill templates.
 
     Called during module initialization.
     """
-    skills = [
-        SkillDef(
-            name="commit",
-            description="Review staged changes and create a well-structured git commit",
-            triggers=["/commit"],
-            tools=["Bash", "Read"],
-            prompt=_COMMIT_PROMPT,
-            file_path="<builtin>",
-            when_to_use=(
+    templates = [
+        SkillTemplate(
+            skill_id="commit",
+            summary="Review staged changes and create a well-structured git commit",
+            activators=["/commit"],
+            allowed_tools=["Bash", "Read"],
+            template=_COMMIT_TEMPLATE,
+            origin="<builtin>",
+            usage_context=(
                 "Use when the user wants to commit changes. "
-                "Triggers: '/commit', 'commit changes', 'make a commit'."
+                "Activators: '/commit', 'commit changes', 'make a commit'."
             ),
-            argument_hint="[optional context]",
-            arguments=[],
-            user_invocable=True,
-            context="inline",
-            source="builtin",
+            param_guide="[optional context]",
+            param_names=[],
+            visible_to_user=True,
+            exec_mode="direct",
+            origin_type="builtin",
         ),
-        SkillDef(
-            name="review",
-            description="Review code changes or a pull request and provide structured feedback",
-            triggers=["/review", "/review-pr"],
-            tools=["Bash", "Read", "Grep"],
-            prompt=_REVIEW_PROMPT,
-            file_path="<builtin>",
-            when_to_use="Use when the user wants a code review. Triggers: '/review', '/review-pr', 'review this PR'.",
-            argument_hint="[PR number or URL]",
-            arguments=["pr"],
-            user_invocable=True,
-            context="inline",
-            source="builtin",
+        SkillTemplate(
+            skill_id="review",
+            summary="Review code changes or a pull request and provide structured feedback",
+            activators=["/review", "/review-pr"],
+            allowed_tools=["Bash", "Read", "Grep"],
+            template=_REVIEW_TEMPLATE,
+            origin="<builtin>",
+            usage_context=(
+                "Use when the user wants a code review. "
+                "Activators: '/review', '/review-pr', 'review this PR'."
+            ),
+            param_guide="[PR number or URL]",
+            param_names=["pr"],
+            visible_to_user=True,
+            exec_mode="direct",
+            origin_type="builtin",
         ),
-        SkillDef(
-            name="explain",
-            description="Explain code in detail for learning purposes",
-            triggers=["/explain"],
-            tools=["Read", "Grep", "Glob"],
-            prompt=_EXPLAIN_PROMPT,
-            file_path="<builtin>",
-            when_to_use="Use when the user wants to understand code. Triggers: '/explain', 'explain this code'.",
-            argument_hint="[file or symbol name]",
-            arguments=[],
-            user_invocable=True,
-            context="inline",
-            source="builtin",
+        SkillTemplate(
+            skill_id="explain",
+            summary="Explain code in detail for learning purposes",
+            activators=["/explain"],
+            allowed_tools=["Read", "Grep", "Glob"],
+            template=_EXPLAIN_TEMPLATE,
+            origin="<builtin>",
+            usage_context=(
+                "Use when the user wants to understand code. "
+                "Activators: '/explain', 'explain this code'."
+            ),
+            param_guide="[file or symbol name]",
+            param_names=[],
+            visible_to_user=True,
+            exec_mode="direct",
+            origin_type="builtin",
         ),
-        SkillDef(
-            name="test",
-            description="Generate comprehensive tests for code",
-            triggers=["/test"],
-            tools=["Read", "Grep", "Glob", "Write", "Bash"],
-            prompt=_TEST_PROMPT,
-            file_path="<builtin>",
-            when_to_use="Use when the user wants to create tests. Triggers: '/test', 'write tests'.",
-            argument_hint="[file or symbol name]",
-            arguments=[],
-            user_invocable=True,
-            context="inline",
-            source="builtin",
+        SkillTemplate(
+            skill_id="test",
+            summary="Generate comprehensive tests for code",
+            activators=["/test"],
+            allowed_tools=["Read", "Grep", "Glob", "Write", "Bash"],
+            template=_TEST_TEMPLATE,
+            origin="<builtin>",
+            usage_context=(
+                "Use when the user wants to create tests. "
+                "Activators: '/test', 'write tests'."
+            ),
+            param_guide="[file or symbol name]",
+            param_names=[],
+            visible_to_user=True,
+            exec_mode="direct",
+            origin_type="builtin",
         ),
-        SkillDef(
-            name="doc",
-            description="Generate or update documentation for code",
-            triggers=["/doc"],
-            tools=["Read", "Grep", "Glob", "Write", "Edit"],
-            prompt=_DOC_PROMPT,
-            file_path="<builtin>",
-            when_to_use="Use when the user wants documentation. Triggers: '/doc', 'document this'.",
-            argument_hint="[file or symbol name]",
-            arguments=[],
-            user_invocable=True,
-            context="inline",
-            source="builtin",
+        SkillTemplate(
+            skill_id="doc",
+            summary="Generate or update documentation for code",
+            activators=["/doc"],
+            allowed_tools=["Read", "Grep", "Glob", "Write", "Edit"],
+            template=_DOC_TEMPLATE,
+            origin="<builtin>",
+            usage_context=(
+                "Use when the user wants documentation. "
+                "Activators: '/doc', 'document this'."
+            ),
+            param_guide="[file or symbol name]",
+            param_names=[],
+            visible_to_user=True,
+            exec_mode="direct",
+            origin_type="builtin",
         ),
     ]
 
-    for skill in skills:
-        register_builtin_skill(skill)
-
-
-# Auto-register on import
-register_builtin_skills()
+    for tmpl in templates:
+        register_builtin_template(tmpl)

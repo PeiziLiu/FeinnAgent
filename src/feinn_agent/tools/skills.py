@@ -1,88 +1,93 @@
-"""Skill tools: Skill and SkillList for invoking and discovering skills."""
+"""Skill tools: Skill and SkillList for invoking and discovering skill templates."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from ..skill.loader import find_skill, get_skill_by_name, load_skills, substitute_arguments
+from ..skill.loader import (
+    find_skill,
+    get_skill_by_name,
+    load_skills,
+    render_template,
+)
 from ..types import ToolDef
 
 logger = logging.getLogger(__name__)
 
 
 async def _skill_tool(params: dict[str, Any], config: dict[str, Any]) -> str:
-    """Execute a skill by name.
+    """Execute a skill template by ID.
 
-    This is a synchronous wrapper that collects the skill output.
+    This is a synchronous wrapper that prepares the skill for execution.
     For streaming execution, use the skill executor directly.
 
     Args:
         params: Tool parameters
-            - name: Skill name or trigger
-            - args: Arguments to pass to the skill
+            - id: Skill identifier or activator
+            - params: Parameters to pass to the skill
         config: Agent configuration
 
     Returns:
-        Skill execution result as string
+        Skill execution preparation result as string
     """
-    skill_name = params.get("name", "").strip()
-    args = params.get("args", "")
+    skill_id = params.get("id", params.get("name", "")).strip()
+    skill_params = params.get("params", params.get("args", ""))
 
-    if not skill_name:
-        return "Error: skill name is required"
+    if not skill_id:
+        return "Error: skill id is required"
 
-    # Look up by name first, then by trigger
-    skill = get_skill_by_name(skill_name)
-    if skill is None:
-        skill = find_skill(skill_name)
+    # Look up by ID first, then by activator
+    template = get_skill_by_name(skill_id)
+    if template is None:
+        template = find_skill(skill_id)
 
-    if skill is None:
-        names = [s.name for s in load_skills()]
-        return f"Error: skill '{skill_name}' not found. Available: {', '.join(names)}"
+    if template is None:
+        ids = [t.skill_id for t in load_skills()]
+        return f"Error: skill '{skill_id}' not found. Available: {', '.join(ids)}"
 
-    # Render the skill prompt
-    rendered = substitute_arguments(skill.prompt, args, skill.arguments)
+    # Render the skill template
+    rendered = render_template(template.template, skill_params, template.param_names)
 
     # For tool execution, we return the rendered prompt
     # The agent will then process this as a user message
-    result = f"[Skill: {skill.name}]\n\n{rendered}"
+    result = f"[Skill: {template.skill_id}]\n\n{rendered}"
 
-    logger.info("Skill tool invoked: %s with args: %s", skill.name, args)
+    logger.info("Skill tool invoked: %s with params: %s", template.skill_id, skill_params)
 
     return result
 
 
 async def _skill_list_tool(params: dict[str, Any], config: dict[str, Any]) -> str:
-    """List all available skills.
+    """List all available skill templates.
 
     Args:
         params: Empty dict (no parameters)
         config: Agent configuration
 
     Returns:
-        Formatted list of available skills
+        Formatted list of available skill templates
     """
-    skills = load_skills()
+    templates = load_skills()
 
-    if not skills:
+    if not templates:
         return "No skills available. Create skills in ~/.feinn/skills/ or .feinn/skills/"
 
-    lines = ["Available skills:\n"]
+    lines = ["Available skill templates:\n"]
 
-    for skill in skills:
-        if not skill.user_invocable:
+    for tmpl in templates:
+        if not tmpl.visible_to_user:
             continue
 
-        triggers = ", ".join(skill.triggers)
-        hint = f"  args: {skill.argument_hint}" if skill.argument_hint else ""
-        when = f"\n    when: {skill.when_to_use}" if skill.when_to_use else ""
-        tools = f"\n    tools: {', '.join(skill.tools)}" if skill.tools else ""
-        context = f"\n    context: {skill.context}" if skill.context != "inline" else ""
+        activators = ", ".join(tmpl.activators)
+        hint = f"  params: {tmpl.param_guide}" if tmpl.param_guide else ""
+        when = f"\n    when: {tmpl.usage_context}" if tmpl.usage_context else ""
+        tools = f"\n    tools: {', '.join(tmpl.allowed_tools)}" if tmpl.allowed_tools else ""
+        mode = f"\n    mode: {tmpl.exec_mode}" if tmpl.exec_mode != "direct" else ""
 
         lines.append(
-            f"- **{skill.name}** [{triggers}]{hint}\n"
-            f"  {skill.description}{when}{tools}{context}"
+            f"- **{tmpl.skill_id}** [{activators}]{hint}\n"
+            f"  {tmpl.summary}{when}{tools}{mode}"
         )
 
     return "\n".join(lines)
@@ -92,25 +97,25 @@ async def _skill_list_tool(params: dict[str, Any], config: dict[str, Any]) -> st
 SKILL_TOOL_DEF = ToolDef(
     name="Skill",
     description=(
-        "Invoke a named skill (reusable prompt template). "
-        "Skills are pre-defined workflows for common tasks like committing code, "
+        "Invoke a named skill template (reusable workflow). "
+        "Templates are pre-defined workflows for common tasks like committing code, "
         "reviewing PRs, generating tests, etc. "
-        "Use SkillList to see available skills and their triggers."
+        "Use SkillList to see available templates and their activators."
     ),
     input_schema={
         "type": "object",
         "properties": {
-            "name": {
+            "id": {
                 "type": "string",
-                "description": "Skill name (e.g., 'commit', 'review') or trigger (e.g., '/commit')",
+                "description": "Skill ID (e.g., 'commit', 'review') or activator (e.g., '/commit')",
             },
-            "args": {
+            "params": {
                 "type": "string",
-                "description": "Arguments to pass to the skill (replaces $ARGUMENTS placeholder)",
+                "description": "Parameters to pass to the skill (replaces $PARAMS placeholder)",
                 "default": "",
             },
         },
-        "required": ["name"],
+        "required": ["id"],
     },
     handler=_skill_tool,
     read_only=False,
@@ -119,7 +124,7 @@ SKILL_TOOL_DEF = ToolDef(
 
 SKILL_LIST_TOOL_DEF = ToolDef(
     name="SkillList",
-    description="List all available skills with their names, triggers, descriptions, and usage hints.",
+    description="List all available skill templates with their IDs, activators, summaries, and usage hints.",
     input_schema={
         "type": "object",
         "properties": {},
