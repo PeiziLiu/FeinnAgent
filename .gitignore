@@ -1,0 +1,53 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+env/
+venv/
+ENV/
+
+# 日志与临时文件
+*.log
+logs/
+log/
+temp/
+tmp/
+*.tmp
+*.pid
+*.seed
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 模型与数据
+*.pth
+*.pt
+*.bin
+*.ckpt
+*.onnx
+*.h5
+*.joblib
+*.pkl
+*.pickle
+data/
+datasets/
+models/
+checkpoints/
+runs/
+
+# 配置与密钥
+.env
+.env.*
+!.env.example
+config.yaml
+secret.json
+credentials.json
+
