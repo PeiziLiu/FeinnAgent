@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-from .config import load_config
+from .config import load_config, setup_logging
 from .context import build_system_prompt
 
 if TYPE_CHECKING:
@@ -54,7 +54,7 @@ async def _run_interactive(config: dict[str, Any]) -> None:
     # Welcome banner
     click.echo(click.style("\n  FeinnAgent v0.1.0", fg="cyan", bold=True))
     click.echo(click.style(f"  Model: {config['model']}", fg="yellow"))
-    click.echo(click.style("  Type '/quit' to exit, '/help' for commands\n", fg="dim"))
+    click.echo(click.style("  Type '/quit' to exit, '/help' for commands\n", fg="bright_black"))
 
     agent = FeinnAgent(config=config, system_prompt=system)
 
@@ -84,7 +84,7 @@ async def _run_interactive(config: dict[str, Any]) -> None:
                     click.echo(event.text, nl=False)
                 elif isinstance(event, ThinkingChunk):
                     click.echo(
-                        click.style(f"\n[thinking: {event.thinking[:100]}...]", fg="dim"), nl=False
+                        click.style(f"\n[thinking: {event.thinking[:100]}...]", fg="bright_black"), nl=False
                     )
                 elif isinstance(event, ToolStart):
                     tool_depth += 1
@@ -115,7 +115,7 @@ async def _run_interactive(config: dict[str, Any]) -> None:
                     if cost > 0:
                         tokens_str += f" (${cost:.4f})"
                     click.echo(
-                        click.style(f"  ┊ {tokens_str} | {event.turn_count} turns", fg="dim")
+                        click.style(f"  ┊ {tokens_str} | {event.turn_count} turns", fg="bright_black")
                     )
         except Exception as e:
             click.echo(click.style(f"\nError: {e}", fg="red"))
@@ -228,6 +228,7 @@ def _handle_command(cmd: str, agent: FeinnAgent, config: dict[str, Any]) -> bool
 @click.argument("prompt", required=False)
 @click.option("--model", "-m", default=None, help="Model to use")
 @click.option("--accept-all", is_flag=True, help="Auto-approve all tool calls")
+@click.option("--interactive", "-i", is_flag=True, help="Start interactive REPL mode")
 @click.option("--serve", is_flag=True, help="Start API server instead of REPL")
 @click.option("--host", default=None, help="Server host")
 @click.option("--port", default=None, type=int, help="Server port")
@@ -237,13 +238,20 @@ def main(
     prompt: str | None,
     model: str | None,
     accept_all: bool,
+    interactive: bool,
     serve: bool,
     host: str | None,
     port: int | None,
     thinking: bool,
     config_file: str | None,
 ) -> None:
-    """FeinnAgent — Enterprise-grade async AI agent."""
+    """FeinnAgent — Enterprise-grade async AI agent.
+
+    Usage:
+        feinn "your question"     # One-shot mode
+        feinn -i                  # Interactive REPL mode
+        feinn --serve             # Start API server
+    """
     config = load_config()
 
     # Apply CLI overrides
@@ -262,12 +270,12 @@ def main(
         from .server import run_server
 
         run_server(config)
-    elif prompt:
+    elif interactive or (not prompt and not serve):
+        # Interactive REPL (default when no prompt provided)
+        asyncio.run(_run_interactive(config))
+    else:
         # One-shot mode
         asyncio.run(_run_oneshot(prompt, config))
-    else:
-        # Interactive REPL
-        asyncio.run(_run_interactive(config))
 
 
 async def _run_oneshot(prompt: str, config: dict[str, Any]) -> None:

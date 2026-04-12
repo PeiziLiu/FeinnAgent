@@ -9,6 +9,19 @@ from typing import Any
 
 from .types import PermissionMode
 
+# Load .env file if python-dotenv is available
+try:
+    from dotenv import load_dotenv
+
+    _dotenv_loaded = False
+    for _dotenv_path in [Path(".env"), Path.home() / ".feinn" / ".env"]:
+        if _dotenv_path.exists():
+            load_dotenv(_dotenv_path)
+            _dotenv_loaded = True
+            break
+except ImportError:
+    pass  # python-dotenv not installed
+
 _DEFAULTS: dict[str, Any] = {
     "model": "anthropic/claude-sonnet-4-20250514",
     "max_tokens": 16384,
@@ -24,14 +37,22 @@ _DEFAULTS: dict[str, Any] = {
     "server_host": "0.0.0.0",
     "server_port": 8000,
     "log_level": "INFO",
+    "log_file": None,  # Path to log file (e.g., "~/.feinn/feinn.log")
 }
 
 _ENV_MAP: dict[str, str] = {
+    "model": "DEFAULT_MODEL",
     "anthropic_api_key": "ANTHROPIC_API_KEY",
     "openai_api_key": "OPENAI_API_KEY",
     "gemini_api_key": "GEMINI_API_KEY",
     "dashscope_api_key": "DASHSCOPE_API_KEY",
     "moonshot_api_key": "MOONSHOT_API_KEY",
+    "siliconflow_api_key": "SILICONFLOW_API_KEY",
+    "siliconflow_base_url": "SILICONFLOW_BASE_URL",
+    "azure_api_key": "AZURE_OPENAI_API_KEY",
+    "azure_base_url": "AZURE_OPENAI_URL",
+    "vllm_api_key": "VLLM_API_KEY",
+    "vllm_base_url": "VLLM_BASE_URL",
     "custom_api_key": "CUSTOM_API_KEY",
     "custom_base_url": "CUSTOM_BASE_URL",
 }
@@ -84,3 +105,25 @@ def get_api_key(provider: str, config: dict[str, Any]) -> str:
         return key
     env_var = _ENV_MAP.get(f"{provider}_api_key", "")
     return os.environ.get(env_var, "") if env_var else ""
+
+
+def setup_logging(config: dict[str, Any]) -> None:
+    """Setup logging with optional file output."""
+    import logging
+    import sys
+
+    log_level = config.get("log_level", "INFO")
+    log_file = config.get("log_file")
+
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
+
+    if log_file:
+        log_path = Path(log_file).expanduser()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
+
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=handlers,
+    )

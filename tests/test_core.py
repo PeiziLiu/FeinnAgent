@@ -166,7 +166,7 @@ class TestToolRegistry:
             handler=AsyncMock(),
         ))
         schemas = tool_schemas()
-        assert any(s["name"] == "SchemaTest" for s in schemas)
+        assert any(s["function"]["name"] == "SchemaTest" for s in schemas)
 
 
 # ── Compaction tests ────────────────────────────────────────────────

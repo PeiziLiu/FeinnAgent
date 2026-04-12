@@ -34,6 +34,7 @@ _PROVIDER_RULES: list[tuple[str, str]] = [
     (r"^deepseek", "deepseek"),
     (r"^kimi", "moonshot"),
     (r"^moonshot", "moonshot"),
+    (r"^siliconflow/", "siliconflow"),
     (r"^ollama/", "ollama"),
     (r"^vllm/", "vllm"),
     (r"^lmstudio/", "lmstudio"),
@@ -43,10 +44,12 @@ _PROVIDER_RULES: list[tuple[str, str]] = [
 _CONTEXT_LIMITS: dict[str, int] = {
     "anthropic": 200_000,
     "openai": 128_000,
+    "azure": 128_000,
     "gemini": 1_000_000,
     "qwen": 1_000_000,
     "deepseek": 128_000,
     "moonshot": 128_000,
+    "siliconflow": 128_000,
     "ollama": 128_000,
     "vllm": 128_000,
     "lmstudio": 128_000,
@@ -55,10 +58,12 @@ _CONTEXT_LIMITS: dict[str, int] = {
 
 _OPENAI_COMPAT_PROVIDERS = {
     "openai",
+    "azure",
     "gemini",
     "qwen",
     "deepseek",
     "moonshot",
+    "siliconflow",
     "ollama",
     "vllm",
     "lmstudio",
@@ -101,16 +106,25 @@ def get_base_url(provider: str, config: dict[str, Any]) -> str:
     """Return the base URL for a provider."""
     urls: dict[str, str] = {
         "openai": "https://api.openai.com/v1",
+        "azure": "",  # Azure uses full deployment URL
         "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
         "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "deepseek": "https://api.deepseek.com/v1",
         "moonshot": "https://api.moonshot.cn/v1",
+        "siliconflow": "https://api.siliconflow.cn/v1",
         "ollama": "http://localhost:11434/v1",
         "vllm": "http://localhost:8000/v1",
         "lmstudio": "http://localhost:1234/v1",
     }
     if provider == "custom":
         return config.get("custom_base_url", os.environ.get("CUSTOM_BASE_URL", ""))
+    if provider == "azure":
+        return config.get("azure_base_url", os.environ.get("AZURE_OPENAI_URL", ""))
+    if provider == "siliconflow":
+        return config.get("siliconflow_base_url", os.environ.get("SILICONFLOW_BASE_URL", urls["siliconflow"]))
+    if provider == "vllm":
+        # vLLM supports custom base URL via config or environment
+        return config.get("vllm_base_url", os.environ.get("VLLM_BASE_URL", urls["vllm"]))
     return urls.get(provider, "")
 
 
@@ -251,6 +265,20 @@ async def _stream_openai_compat(
     base_url = get_base_url(info.provider, config)
     api_key = config.get(f"{info.provider}_api_key", "") or "unused"
 
+    # vLLM may have API key authentication enabled
+    if info.provider == "vllm":
+        api_key = config.get("vllm_api_key", os.environ.get("VLLM_API_KEY", "unused"))
+
+    # Azure OpenAI
+    if info.provider == "azure":
+        api_key = config.get("azure_api_key", os.environ.get("AZURE_OPENAI_API_KEY", ""))
+
+    # SiliconFlow
+    if info.provider == "siliconflow":
+        api_key = config.get("siliconflow_api_key", "") or os.environ.get("SILICONFLOW_API_KEY", "")
+        if not api_key:
+            raise ValueError("SiliconFlow API key not configured. Set SILICONFLOW_API_KEY environment variable or config.siliconflow_api_key")
+
     client = AsyncOpenAI(api_key=api_key, base_url=base_url if base_url else None)
 
     # Convert messages to OpenAI format
@@ -259,9 +287,13 @@ async def _stream_openai_compat(
     kwargs: dict[str, Any] = {
         "model": info.model,
         "messages": api_messages,
-        "max_tokens": config.get("max_tokens", 16384),
         "stream": True,
     }
+
+    # SiliconFlow doesn't accept max_tokens in the same way
+    if info.provider != "siliconflow":
+        kwargs["max_tokens"] = config.get("max_tokens", 16384)
+
     if tool_schemas:
         kwargs["tools"] = tool_schemas
 

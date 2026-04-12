@@ -52,9 +52,12 @@ def tool_schemas() -> list[dict[str, Any]]:
     for td in _tools.values():
         schemas.append(
             {
-                "name": td.name,
-                "description": td.description,
-                "input_schema": td.input_schema,
+                "type": "function",
+                "function": {
+                    "name": td.name,
+                    "description": td.description,
+                    "parameters": td.input_schema,
+                },
             }
         )
     return schemas
