@@ -55,6 +55,8 @@ _ENV_MAP: dict[str, str] = {
     "vllm_base_url": "VLLM_BASE_URL",
     "custom_api_key": "CUSTOM_API_KEY",
     "custom_base_url": "CUSTOM_BASE_URL",
+    "log_level": "LOG_LEVEL",
+    "log_file": "LOG_FILE",
 }
 
 

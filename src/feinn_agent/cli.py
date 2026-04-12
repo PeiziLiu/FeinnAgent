@@ -325,6 +325,7 @@ def main(
         feinn --serve             # Start API server
     """
     config = load_config()
+    setup_logging(config)
 
     # Apply CLI overrides
     if model:
