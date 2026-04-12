@@ -450,6 +450,23 @@ Apache License 2.0 - 详见 [LICENSE](LICENSE) 文件
 
 ---
 
+## 联系方式与支持
+
+- **邮箱**: hanfazy@126.com
+- **问题反馈**: [GitHub Issues](https://github.com/your-org/feinn-agent/issues)
+
+### 捐赠支持
+
+如果这个项目对您有帮助，欢迎支持开发：
+
+<p align="center">
+  <img src="docs/images/wechat-donate.png" width="200" alt="微信捐赠">
+  <br>
+  <sub>微信扫码捐赠</sub>
+</p>
+
+---
+
 <p align="center">
   Built with ❤️ by Feinn Team
 </p>

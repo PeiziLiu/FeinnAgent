@@ -450,6 +450,23 @@ Apache License 2.0 - See [LICENSE](LICENSE) file for details
 
 ---
 
+## Contact & Support
+
+- **Email**: hanfazy@126.com
+- **Issues**: [GitHub Issues](https://github.com/your-org/feinn-agent/issues)
+
+### Donate
+
+If you find this project helpful, consider supporting its development:
+
+<p align="center">
+  <img src="docs/images/wechat-donate.png" width="200" alt="WeChat Donate">
+  <br>
+  <sub>WeChat QR Code</sub>
+</p>
+
+---
+
 <p align="center">
   Built with ❤️ by Feinn Team
 </p>
