@@ -453,7 +453,7 @@ Apache License 2.0 - 详见 [LICENSE](LICENSE) 文件
 ## 联系方式与支持
 
 - **邮箱**: hanfazy@126.com
-- **问题反馈**: [GitHub Issues](https://github.com/your-org/feinn-agent/issues)
+- **问题反馈**: [GitHub Issues](https://github.com/PeiziLiu/FeinnAgent/issues)
 
 ### 捐赠支持
 
