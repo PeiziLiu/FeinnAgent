@@ -26,6 +26,7 @@ from .executor import execute_skill
 from .loader import (
     SkillTemplate,
     find_skill,
+    get_skill_by_name,
     load_skills,
     render_template,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "SkillTemplate",
     "load_skills",
     "find_skill",
+    "get_skill_by_name",
     "render_template",
     "execute_skill",
     "register_builtin_skills",

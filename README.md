@@ -236,6 +236,7 @@ Options:
 | `/save` | 保存会话到文件 |
 | `/tasks` | 显示任务列表 |
 | `/memory` | 显示记忆列表 |
+| `/skills` | 列出可用的 Skill |
 | `/config` | 显示当前配置 |
 | `/accept-all` | 切换到自动接受模式 |
 | `/auto` | 切换到智能判断模式 |
@@ -313,6 +314,77 @@ feinn --model vllm/Qwen2.5-72B-Instruct -i
 | 任务管理 | `TaskCreate`, `TaskGet`, `TaskList` | DAG 任务编排 |
 | 子代理 | `Agent`, `CheckAgentResult` | 并发子代理协作 |
 | Skill | `Skill`, `SkillList` | 可复用提示模板 |
+
+---
+
+## Skill 系统
+
+Skill 是 FeinnAgent 的可复用提示模板系统，用于封装常见的工作流程。通过触发词（activator）快速调用预定义的提示模板。
+
+### 内置 Skill
+
+| Skill | 触发词 | 说明 |
+|-------|--------|------|
+| `commit` | `/commit` | 审查暂存更改并创建规范的 git 提交 |
+| `review` | `/review`, `/review-pr` | 审查代码或 PR 并提供结构化反馈 |
+| `explain` | `/explain` | 详细解释代码，适合学习理解 |
+| `test` | `/test` | 为指定代码生成全面的测试用例 |
+| `doc` | `/doc` | 为代码生成或更新文档 |
+
+### 使用 Skill
+
+在交互模式下，直接输入触发词：
+
+```
+feinn> /commit
+[Agent 会审查 git 状态并创建提交]
+
+feinn> /explain src/feinn_agent/agent.py
+[Agent 会详细解释该文件的代码]
+
+feinn> /test src/feinn_agent/tools.py
+[Agent 会为该模块生成测试]
+
+feinn> /review
+[Agent 会审查当前分支的更改]
+```
+
+### 自定义 Skill
+
+在 `~/.feinn/skills/` 或项目 `.feinn/skills/` 目录下创建 `.md` 文件：
+
+```markdown
+---
+id: my-skill
+summary: 我的自定义 Skill
+activators: ["/my", "do my thing"]
+tools: ["Read", "Write"]
+param-guide: "[文件名]"
+param-names: ["filename"]
+---
+
+请处理文件: $FILENAME
+
+上下文: $PARAMS
+```
+
+**Frontmatter 字段说明：**
+
+| 字段 | 说明 | 必需 |
+|------|------|------|
+| `id` | Skill 唯一标识 | 是 |
+| `summary` | 简短描述 | 是 |
+| `activators` | 触发词列表 | 否（默认使用 `/id`） |
+| `tools` | 允许使用的工具 | 否 |
+| `param-guide` | 参数提示 | 否 |
+| `param-names` | 参数名列表（用于 `$NAME` 替换） | 否 |
+| `exec-mode` | 执行模式：`direct` 或 `isolated` | 否 |
+| `visible` | 是否在列表中显示 | 否 |
+
+**模板占位符：**
+
+- `$PARAMS` 或 `$ARGUMENTS` - 用户输入的完整参数字符串
+- `$NAME` - 对应 `param-names` 中的命名参数（大写）
 
 ---
 

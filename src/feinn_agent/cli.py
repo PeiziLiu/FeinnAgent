@@ -38,8 +38,10 @@ from .types import (
 
 def _ensure_builtins() -> None:
     """Ensure all tool modules are imported so they register."""
-    # Already imported above — this is explicit for clarity
-    pass
+    # Import and register builtin skills
+    from .skill import register_builtin_skills
+
+    register_builtin_skills()
 
 
 async def _run_interactive(config: dict[str, Any]) -> None:
@@ -75,6 +77,12 @@ async def _run_interactive(config: dict[str, Any]) -> None:
             handled = _handle_command(user_input, agent, config)
             if handled:
                 continue
+
+        # Check for skill activator (e.g., "/weather", "/commit")
+        skill_prompt = _try_handle_skill(user_input)
+        if skill_prompt:
+            # Replace user input with rendered skill template
+            user_input = skill_prompt
 
         # Run agent
         try:
@@ -142,12 +150,20 @@ def _handle_command(cmd: str, agent: FeinnAgent, config: dict[str, Any]) -> bool
             ("/save", "Save session to file"),
             ("/tasks", "Show task list"),
             ("/memory", "Show memory list"),
+            ("/skills", "List available skills"),
             ("/config", "Show current config"),
             ("/accept-all", "Auto-approve all tool calls"),
             ("/auto", "Auto-approve reads, ask for writes"),
             ("/manual", "Ask for every tool call"),
         ]:
             click.echo(f"  {name:16s} {desc}")
+        click.echo()
+        click.echo(click.style("  Skills:", fg="cyan", bold=True))
+        click.echo("  /commit          Create a git commit")
+        click.echo("  /review          Review code or PR")
+        click.echo("  /explain         Explain code in detail")
+        click.echo("  /test            Generate tests for code")
+        click.echo("  /doc             Generate documentation")
         click.echo()
 
     elif command == "/model":
@@ -196,6 +212,38 @@ def _handle_command(cmd: str, agent: FeinnAgent, config: dict[str, Any]) -> bool
         if not any(list_memories(s) for s in ("user", "project")):
             click.echo("No memories saved.")
 
+    elif command == "/skills":
+        from .skill import load_skills
+
+        skills = load_skills()
+        if not skills:
+            click.echo("No skills available.")
+            return True
+
+        click.echo(click.style("\n  Available Skills:", fg="cyan", bold=True))
+        builtin_skills = []
+        user_skills = []
+
+        for skill in skills:
+            if skill.origin_type == "builtin":
+                builtin_skills.append(skill)
+            else:
+                user_skills.append(skill)
+
+        if builtin_skills:
+            click.echo(click.style("\n  Built-in:", fg="yellow"))
+            for skill in builtin_skills:
+                activators = ", ".join(skill.activators[:2])
+                click.echo(f"  {activators:20s} {skill.summary}")
+
+        if user_skills:
+            click.echo(click.style("\n  Custom:", fg="yellow"))
+            for skill in user_skills:
+                activators = ", ".join(skill.activators[:2]) if skill.activators else f"/{skill.skill_id}"
+                origin = f" ({skill.origin_type})" if skill.origin_type != "user" else ""
+                click.echo(f"  {activators:20s} {skill.summary}{origin}")
+        click.echo()
+
     elif command == "/config":
         import json
 
@@ -215,10 +263,34 @@ def _handle_command(cmd: str, agent: FeinnAgent, config: dict[str, Any]) -> bool
         click.echo("Permission mode: manual")
 
     else:
-        click.echo(f"Unknown command: {command}. Type /help for help.")
-        return True
+        # Not a known command - let caller check for skill activator
+        return False
 
     return True
+
+
+def _try_handle_skill(user_input: str) -> str | None:
+    """Check if input matches a skill activator and return rendered template.
+
+    Args:
+        user_input: Raw user input
+
+    Returns:
+        Rendered skill template if matched, None otherwise
+    """
+    from .skill import find_skill, render_template
+
+    skill = find_skill(user_input)
+    if skill:
+        # Extract params after the activator
+        parts = user_input.split(maxsplit=1)
+        params = parts[1] if len(parts) > 1 else ""
+
+        # Render template with params
+        rendered = render_template(skill.template, params, skill.param_names)
+        return rendered
+
+    return None
 
 
 # ── Click CLI ───────────────────────────────────────────────────────
