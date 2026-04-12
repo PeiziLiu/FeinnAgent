@@ -1,22 +1,22 @@
-# SiliconFlow 配置指南
+# SiliconFlow Setup Guide
 
-SiliconFlow 是中国的大模型 API 平台，提供多种开源和商业模型的访问。
+SiliconFlow is a China-based large model API platform providing access to various open-source and commercial models.
 
-## 快速配置
+## Quick Setup
 
-### 1. 获取 API Key
+### 1. Get API Key
 
-访问 [SiliconFlow 官网](https://siliconflow.cn) 注册并获取 API Key。
+Visit [SiliconFlow Official Website](https://siliconflow.cn) to register and get an API Key.
 
-### 2. 环境变量配置
+### 2. Environment Variable Configuration
 
 ```bash
-# .env 文件
+# .env file
 SILICONFLOW_API_KEY=sk-your-api-key
 DEFAULT_MODEL=siliconflow/Pro/zai-org/GLM-5.1
 ```
 
-### 3. 代码中使用
+### 3. Use in Code
 
 ```python
 from feinn_agent import FeinnAgent
@@ -28,31 +28,31 @@ agent = FeinnAgent(
     }
 )
 
-response = await agent.run("你好，请介绍一下你自己")
+response = await agent.run("Hello, please introduce yourself")
 print(response)
 ```
 
-## 支持的模型
+## Supported Models
 
-SiliconFlow 提供的模型可以使用以下格式：
+SiliconFlow models can be used in the following format:
 
 ```python
-# GLM 系列
+# GLM series
 agent = FeinnAgent(model="siliconflow/Pro/zai-org/GLM-5.1")
 agent = FeinnAgent(model="siliconflow/THUDM/glm-4-9b-chat")
 
-# Qwen 系列
+# Qwen series
 agent = FeinnAgent(model="siliconflow/Qwen/Qwen2.5-72B-Instruct")
 
-# DeepSeek 系列
+# DeepSeek series
 agent = FeinnAgent(model="siliconflow/deepseek-ai/DeepSeek-V3")
 agent = FeinnAgent(model="siliconflow/deepseek-ai/DeepSeek-R1")
 
-# Llama 系列
+# Llama series
 agent = FeinnAgent(model="siliconflow/meta-llama/Llama-3.1-70B-Instruct")
 ```
 
-## 完整示例
+## Complete Example
 
 ```python
 import asyncio
@@ -67,13 +67,13 @@ async def main():
         }
     )
 
-    # 简单对话
-    response = await agent.run("解释量子计算的基本原理")
+    # Simple conversation
+    response = await agent.run("Explain the basic principles of quantum computing")
     print(response)
 
-    # 使用工具
+    # Use tools
     response = await agent.run(
-        "读取当前目录下的 README.md 文件并总结内容",
+        "Read the README.md file in the current directory and summarize its content",
         tools=["Read", "Glob"]
     )
     print(response)
@@ -82,9 +82,9 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-## 与 curl 对比
+## Comparison with curl
 
-你的 curl 命令：
+Your curl command:
 ```bash
 curl --request POST \
   --url https://api.siliconflow.cn/v1/chat/completions \
@@ -93,13 +93,13 @@ curl --request POST \
   -d '{
     "model": "Pro/zai-org/GLM-5.1",
     "messages": [
-      {"role": "system", "content": "你是一个有用的助手"},
-      {"role": "user", "content": "你好，请介绍一下你自己"}
+      {"role": "system", "content": "You are a helpful assistant"},
+      {"role": "user", "content": "Hello, please introduce yourself"}
     ]
   }'
 ```
 
-对应的 FeinnAgent 配置：
+Corresponding FeinnAgent configuration:
 ```python
 from feinn_agent import FeinnAgent
 
@@ -109,29 +109,29 @@ agent = FeinnAgent(
 )
 
 response = await agent.run(
-    "你好，请介绍一下你自己",
-    system="你是一个有用的助手"
+    "Hello, please introduce yourself",
+    system="You are a helpful assistant"
 )
 ```
 
-## 故障排除
+## Troubleshooting
 
-### API Key 无效
-
-```python
-# 确认 API Key 格式正确
-# SiliconFlow API Key 格式: sk-xxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-### 模型不存在
+### Invalid API Key
 
 ```python
-# 检查模型名称格式
-# 正确: siliconflow/Pro/zai-org/GLM-5.1
-# 错误: Pro/zai-org/GLM-5.1 (缺少 siliconflow/ 前缀)
+# Confirm API Key format is correct
+# SiliconFlow API Key format: sk-xxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-### 连接超时
+### Model Not Found
+
+```python
+# Check model name format
+# Correct: siliconflow/Pro/zai-org/GLM-5.1
+# Incorrect: Pro/zai-org/GLM-5.1 (missing siliconflow/ prefix)
+```
+
+### Connection Timeout
 
 ```python
 from feinn_agent import FeinnAgent
@@ -140,7 +140,7 @@ agent = FeinnAgent(
     model="siliconflow/Pro/zai-org/GLM-5.1",
     config={
         "siliconflow_api_key": "sk-key",
-        "timeout": 120,  # 增加超时时间
+        "timeout": 120,  # Increase timeout
     }
 )
 ```

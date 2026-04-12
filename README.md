@@ -8,270 +8,274 @@
 </p>
 
 <p align="center">
-  <b>企业级多并发 AI Agent 框架</b><br>
-  基于 Python 构建，支持多模型、多并发、上下文压缩、任务编排与子代理协作
+  <b>Enterprise-Grade Multi-Concurrency AI Agent Framework</b><br>
+  Built with Python, supporting multiple models, multi-concurrency, context compression, task orchestration, and sub-agent collaboration
+</p>
+
+<p align="center">
+  <a href="README.zh.md">中文</a> | <strong>English</strong>
 </p>
 
 ---
 
-## 目录
+## Table of Contents
 
-- [安装](#安装)
-- [快速开始](#快速开始)
-- [配置](#配置)
-- [使用模式](#使用模式)
-- [命令参考](#命令参考)
-- [支持模型](#支持模型)
-- [架构特性](#架构特性)
-- [开发指南](#开发指南)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Usage Modes](#usage-modes)
+- [Command Reference](#command-reference)
+- [Supported Models](#supported-models)
+- [Architecture Features](#architecture-features)
+- [Development Guide](#development-guide)
 
 ---
 
-## 安装
+## Installation
 
-### 环境要求
+### Requirements
 
 - Python 3.11+
 - macOS / Linux / Windows
 
-### 安装步骤
+### Installation Steps
 
 ```bash
-# 1. 克隆仓库
+# 1. Clone the repository
 git clone https://github.com/your-org/feinn-agent.git
 cd feinn-agent
 
-# 2. 创建虚拟环境
+# 2. Create virtual environment
 python3.11 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-# 3. 安装依赖
+# 3. Install dependencies
 python3.11 -m pip install -e .
 
-# 4. 配置环境变量
+# 4. Configure environment variables
 cp .env.example .env
-# 编辑 .env 文件，配置你的 API 密钥
+# Edit .env file with your API keys
 ```
 
 ---
 
-## 快速开始
+## Quick Start
 
-### 1. 配置 API 密钥
+### 1. Configure API Keys
 
-编辑 `.env` 文件，选择你要使用的模型提供商：
+Edit `.env` file and select your model provider:
 
 ```bash
-# SiliconFlow（推荐，国内可用）
+# SiliconFlow (recommended, available in China)
 SILICONFLOW_API_KEY=sk-your-key
 DEFAULT_MODEL=siliconflow/Pro/zai-org/GLM-5.1
 
-# 或 OpenAI
+# Or OpenAI
 OPENAI_API_KEY=sk-your-key
 DEFAULT_MODEL=openai/gpt-4o
 
-# 或 Anthropic
+# Or Anthropic
 ANTHROPIC_API_KEY=sk-ant-your-key
 DEFAULT_MODEL=anthropic/claude-sonnet-4
 
-# 或 Azure OpenAI
+# Or Azure OpenAI
 AZURE_OPENAI_API_KEY=your-key
 AZURE_OPENAI_URL=https://your-resource.openai.azure.com/...
 DEFAULT_MODEL=azure/gpt-4
 
-# 或 vLLM 自托管
+# Or vLLM self-hosted
 VLLM_BASE_URL=http://localhost:8000/v1
 DEFAULT_MODEL=vllm/Qwen2.5-72B-Instruct
 ```
 
-### 2. 启动交互模式
+### 2. Start Interactive Mode
 
 ```bash
-# 启动交互式会话（推荐）
+# Start interactive session (recommended)
 feinn -i
 
-# 或一次性提问
-feinn "分析当前目录的代码结构"
+# Or one-shot query
+feinn "Analyze the code structure in current directory"
 
-# 启动 API 服务
+# Start API server
 feinn --serve
 ```
 
-### 3. 交互模式使用
+### 3. Interactive Mode Usage
 
-启动 `feinn -i` 后，你会看到：
+After starting `feinn -i`, you'll see:
 
 ```
   FeinnAgent v0.1.0
   Model: siliconflow/Pro/zai-org/GLM-5.1
   Type '/quit' to exit, '/help' for commands
 
-feinn> 你好
+feinn> Hello
 ```
 
-直接输入你的问题，Agent 会保持对话上下文。
+Type your questions directly, and the Agent maintains conversation context.
 
 ---
 
-## 配置
+## Configuration
 
-### 环境变量 (.env)
+### Environment Variables (.env)
 
-| 变量 | 说明 | 示例 |
-|------|------|------|
-| `DEFAULT_MODEL` | 默认使用的模型 | `siliconflow/Pro/zai-org/GLM-5.1` |
-| `SILICONFLOW_API_KEY` | SiliconFlow API 密钥 | `sk-...` |
-| `OPENAI_API_KEY` | OpenAI API 密钥 | `sk-...` |
-| `ANTHROPIC_API_KEY` | Anthropic API 密钥 | `sk-ant-...` |
-| `AZURE_OPENAI_API_KEY` | Azure OpenAI 密钥 | `...` |
-| `AZURE_OPENAI_URL` | Azure OpenAI 端点 | `https://...` |
-| `VLLM_BASE_URL` | vLLM 服务地址 | `http://localhost:8000/v1` |
-| `VLLM_API_KEY` | vLLM API 密钥（可选） | `sk-...` |
-| `LOG_LEVEL` | 日志级别 | `INFO` / `DEBUG` |
-| `LOG_FILE` | 日志文件路径 | `~/.feinn/feinn.log` |
-| `PERMISSION_MODE` | 权限模式 | `accept_all` / `auto` / `manual` |
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DEFAULT_MODEL` | Default model to use | `siliconflow/Pro/zai-org/GLM-5.1` |
+| `SILICONFLOW_API_KEY` | SiliconFlow API key | `sk-...` |
+| `OPENAI_API_KEY` | OpenAI API key | `sk-...` |
+| `ANTHROPIC_API_KEY` | Anthropic API key | `sk-ant-...` |
+| `AZURE_OPENAI_API_KEY` | Azure OpenAI key | `...` |
+| `AZURE_OPENAI_URL` | Azure OpenAI endpoint | `https://...` |
+| `VLLM_BASE_URL` | vLLM service URL | `http://localhost:8000/v1` |
+| `VLLM_API_KEY` | vLLM API key (optional) | `sk-...` |
+| `LOG_LEVEL` | Log level | `INFO` / `DEBUG` |
+| `LOG_FILE` | Log file path | `~/.feinn/feinn.log` |
+| `PERMISSION_MODE` | Permission mode | `accept_all` / `auto` / `manual` |
 
-### 权限模式
+### Permission Modes
 
-| 模式 | 说明 |
-|------|------|
-| `accept_all` | 自动接受所有工具调用（默认） |
-| `auto` | 智能判断，破坏性操作需确认 |
-| `manual` | 所有工具调用需人工确认 |
+| Mode | Description |
+|------|-------------|
+| `accept_all` | Auto-accept all tool calls (default) |
+| `auto` | Smart judgment, destructive operations require confirmation |
+| `manual` | All tool calls require manual confirmation |
 
 ---
 
-## 使用模式
+## Usage Modes
 
-### 模式一：交互式 CLI（推荐）
+### Mode 1: Interactive CLI (Recommended)
 
-适合多轮对话、复杂任务：
+Best for multi-turn conversations and complex tasks:
 
 ```bash
 feinn -i
 ```
 
-**特点**：
-- 保持对话上下文
-- 支持多轮追问
-- 实时显示工具执行
-- 内置命令快捷操作
+**Features:**
+- Maintains conversation context
+- Supports multi-turn follow-ups
+- Real-time tool execution display
+- Built-in command shortcuts
 
-**示例会话**：
+**Example Session:**
 ```
-feinn> 读取 README.md 文件
-[Tool: Read] 读取中...
-文件内容：...
+feinn> Read the README.md file
+[Tool: Read] Reading...
+File content: ...
 
-feinn> 总结一下这个项目是做什么的
-基于刚才的内容，这是一个...
+feinn> Summarize what this project does
+Based on the content, this is a...
 
-feinn> 帮我创建一个简单的示例
-[Tool: Write] 写入文件 example.py...
-已创建示例文件。
+feinn> Create a simple example for me
+[Tool: Write] Writing file example.py...
+Example file created.
 ```
 
-### 模式二：一次性命令
+### Mode 2: One-Shot Command
 
-适合简单查询、脚本调用：
+Best for simple queries and script calls:
 
 ```bash
-feinn "你的问题或指令"
+feinn "Your question or instruction"
 ```
 
-**示例**：
+**Examples:**
 ```bash
-feinn "解释 Python 的 asyncio 原理"
-feinn "检查当前目录的代码风格问题"
-feinn "生成一个 Flask 项目的 Dockerfile"
+feinn "Explain Python asyncio principles"
+feinn "Check code style issues in current directory"
+feinn "Generate a Dockerfile for Flask project"
 ```
 
-### 模式三：API 服务
+### Mode 3: API Server
 
-适合集成到其他应用：
+Best for integration with other applications:
 
 ```bash
-# 启动服务
+# Start server
 feinn --serve --host 0.0.0.0 --port 8000
 
-# 或使用环境变量
+# Or use environment variables
 SERVER_HOST=0.0.0.0 SERVER_PORT=8000 feinn --serve
 ```
 
-**API 端点**：
-- `POST /chat` - 发送消息
-- `GET /health` - 健康检查
-- `GET /models` - 列出支持的模型
+**API Endpoints:**
+- `POST /chat` - Send message
+- `GET /health` - Health check
+- `GET /models` - List supported models
 
 ---
 
-## 命令参考
+## Command Reference
 
-### 全局选项
+### Global Options
 
 ```bash
 feinn [OPTIONS] [PROMPT]
 
 Options:
-  -i, --interactive    启动交互式 REPL 模式
-  --serve              启动 API 服务
-  --model TEXT         指定模型
-  --accept-all         自动接受所有工具调用
-  --thinking           启用扩展思考模式
-  --host TEXT          服务主机地址
-  --port INTEGER       服务端口
-  --help               显示帮助信息
+  -i, --interactive    Start interactive REPL mode
+  --serve              Start API server
+  --model TEXT         Specify model
+  --accept-all         Auto-approve all tool calls
+  --thinking           Enable extended thinking mode
+  --host TEXT          Server host address
+  --port INTEGER       Server port
+  --help               Show help information
 ```
 
-### 交互模式命令
+### Interactive Mode Commands
 
-在 `feinn -i` 交互模式下，可以使用以下命令：
+In `feinn -i` interactive mode, use these commands:
 
-| 命令 | 说明 |
-|------|------|
-| `/quit` 或 `/q` | 退出程序 |
-| `/help` 或 `/h` | 显示帮助 |
-| `/clear` | 清空对话历史 |
-| `/model [model]` | 查看或切换模型 |
-| `/save` | 保存会话到文件 |
-| `/tasks` | 显示任务列表 |
-| `/memory` | 显示记忆列表 |
-| `/skills` | 列出可用的 Skill |
-| `/config` | 显示当前配置 |
-| `/accept-all` | 切换到自动接受模式 |
-| `/auto` | 切换到智能判断模式 |
-| `/manual` | 切换到手动确认模式 |
+| Command | Description |
+|---------|-------------|
+| `/quit` or `/q` | Exit program |
+| `/help` or `/h` | Show help |
+| `/clear` | Clear conversation history |
+| `/model [model]` | View or switch model |
+| `/save` | Save session to file |
+| `/tasks` | Show task list |
+| `/memory` | Show memory list |
+| `/skills` | List available skills |
+| `/config` | Show current configuration |
+| `/accept-all` | Switch to auto-accept mode |
+| `/auto` | Switch to smart judgment mode |
+| `/manual` | Switch to manual confirmation mode |
 
-### 使用示例
+### Usage Examples
 
 ```bash
-# 交互模式
+# Interactive mode
 feinn -i
 
-# 一次性提问
-feinn "如何优化这段代码？"
+# One-shot query
+feinn "How to optimize this code?"
 
-# 指定模型
-feinn --model openai/gpt-4o "解释量子计算"
+# Specify model
+feinn --model openai/gpt-4o "Explain quantum computing"
 
-# 自动接受所有操作
+# Auto-accept all operations
 feinn -i --accept-all
 
-# 启动 API 服务
+# Start API server
 feinn --serve --port 8080
 
-# 使用 vLLM 本地模型
+# Use vLLM local model
 feinn --model vllm/Qwen2.5-72B-Instruct -i
 ```
 
 ---
 
-## 支持模型
+## Supported Models
 
-### 云服务商
+### Cloud Providers
 
-| 提供商 | 模型格式 | 示例 |
-|--------|----------|------|
+| Provider | Model Format | Example |
+|----------|--------------|---------|
 | SiliconFlow | `siliconflow/{model}` | `siliconflow/Pro/zai-org/GLM-5.1` |
 | OpenAI | `openai/{model}` | `openai/gpt-4o` |
 | Anthropic | `anthropic/{model}` | `anthropic/claude-sonnet-4` |
@@ -279,145 +283,145 @@ feinn --model vllm/Qwen2.5-72B-Instruct -i
 | Gemini | `gemini/{model}` | `gemini/gemini-2.5-pro` |
 | DeepSeek | `deepseek/{model}` | `deepseek/deepseek-v3` |
 
-### 本地部署
+### Local Deployment
 
-| 方式 | 模型格式 | 配置 |
-|------|----------|------|
+| Method | Model Format | Configuration |
+|--------|--------------|---------------|
 | vLLM | `vllm/{model}` | `VLLM_BASE_URL` |
 | Ollama | `ollama/{model}` | `OLLAMA_BASE_URL` |
-| LM Studio | `lmstudio/{model}` | 自动检测 |
+| LM Studio | `lmstudio/{model}` | Auto-detect |
 
 ---
 
-## 架构特性
+## Architecture Features
 
-### 核心特性
+### Core Features
 
-- **多模型支持**: 原生支持 10+ 家 LLM 提供商
-- **企业级并发**: 基于 asyncio 的高性能并发架构
-- **智能上下文压缩**: 自动检测上下文窗口，智能压缩历史消息
-- **任务编排系统**: 内置 DAG 任务管理，支持任务依赖和状态追踪
-- **子代理协作**: 支持并发启动多个子代理，实现复杂任务并行分解
-- **双作用域内存**: Workspace 级与 Agent 级内存隔离
-- **Skill 系统**: 可复用的提示模板，支持触发器和参数替换
-- **权限控制**: 细粒度的工具权限管理
-- **MCP 集成**: 原生支持 Model Context Protocol
+- **Multi-Model Support**: Native support for 10+ LLM providers
+- **Enterprise-Grade Concurrency**: High-performance async architecture based on asyncio
+- **Intelligent Context Compression**: Auto-detect context window, intelligently compress history
+- **Task Orchestration System**: Built-in DAG task management with dependency tracking
+- **Sub-Agent Collaboration**: Support concurrent sub-agent spawning for complex parallel task decomposition
+- **Dual-Scope Memory**: Workspace-level and Agent-level memory isolation
+- **Skill System**: Reusable prompt templates with activators and parameter substitution
+- **Permission Control**: Fine-grained tool permission management
+- **MCP Integration**: Native Model Context Protocol support
 
-### 内置工具（20+）
+### Built-in Tools (20+)
 
-| 类别 | 工具 | 说明 |
-|------|------|------|
-| 文件操作 | `Read`, `Write`, `Edit` | 文件读写编辑 |
-| 搜索 | `Glob`, `Grep` | 文件搜索与内容查找 |
-| 执行 | `Bash` | 命令执行 |
-| 内存管理 | `MemorySave`, `MemorySearch`, `MemoryList` | 知识管理 |
-| 任务管理 | `TaskCreate`, `TaskGet`, `TaskList` | DAG 任务编排 |
-| 子代理 | `Agent`, `CheckAgentResult` | 并发子代理协作 |
-| Skill | `Skill`, `SkillList` | 可复用提示模板 |
+| Category | Tools | Description |
+|----------|-------|-------------|
+| File Operations | `Read`, `Write`, `Edit` | File read/write/edit |
+| Search | `Glob`, `Grep` | File search and content lookup |
+| Execution | `Bash` | Command execution |
+| Memory | `MemorySave`, `MemorySearch`, `MemoryList` | Knowledge management |
+| Task Management | `TaskCreate`, `TaskGet`, `TaskList` | DAG task orchestration |
+| Sub-Agent | `Agent`, `CheckAgentResult` | Concurrent sub-agent collaboration |
+| Skill | `Skill`, `SkillList` | Reusable prompt templates |
 
 ---
 
-## Skill 系统
+## Skill System
 
-Skill 是 FeinnAgent 的可复用提示模板系统，用于封装常见的工作流程。通过触发词（activator）快速调用预定义的提示模板。
+Skill is FeinnAgent's reusable prompt template system for encapsulating common workflows. Invoke predefined prompt templates via activators (e.g., "/commit").
 
-### 内置 Skill
+### Built-in Skills
 
-| Skill | 触发词 | 说明 |
-|-------|--------|------|
-| `commit` | `/commit` | 审查暂存更改并创建规范的 git 提交 |
-| `review` | `/review`, `/review-pr` | 审查代码或 PR 并提供结构化反馈 |
-| `explain` | `/explain` | 详细解释代码，适合学习理解 |
-| `test` | `/test` | 为指定代码生成全面的测试用例 |
-| `doc` | `/doc` | 为代码生成或更新文档 |
+| Skill | Activator | Description |
+|-------|-----------|-------------|
+| `commit` | `/commit` | Review staged changes and create a well-structured git commit |
+| `review` | `/review`, `/review-pr` | Review code or PR and provide structured feedback |
+| `explain` | `/explain` | Explain code in detail for learning purposes |
+| `test` | `/test` | Generate comprehensive tests for specified code |
+| `doc` | `/doc` | Generate or update documentation for code |
 
-### 使用 Skill
+### Using Skills
 
-在交互模式下，直接输入触发词：
+In interactive mode, type the activator directly:
 
 ```
 feinn> /commit
-[Agent 会审查 git 状态并创建提交]
+[Agent will review git state and create a commit]
 
 feinn> /explain src/feinn_agent/agent.py
-[Agent 会详细解释该文件的代码]
+[Agent will explain the code in detail]
 
 feinn> /test src/feinn_agent/tools.py
-[Agent 会为该模块生成测试]
+[Agent will generate tests for this module]
 
 feinn> /review
-[Agent 会审查当前分支的更改]
+[Agent will review current branch changes]
 ```
 
-### 自定义 Skill
+### Custom Skills
 
-在 `~/.feinn/skills/` 或项目 `.feinn/skills/` 目录下创建 `.md` 文件：
+Create `.md` files in `~/.feinn/skills/` or project `.feinn/skills/` directory:
 
 ```markdown
 ---
 id: my-skill
-summary: 我的自定义 Skill
+summary: My custom skill
 activators: ["/my", "do my thing"]
 tools: ["Read", "Write"]
-param-guide: "[文件名]"
+param-guide: "[filename]"
 param-names: ["filename"]
 ---
 
-请处理文件: $FILENAME
+Please process file: $FILENAME
 
-上下文: $PARAMS
+Context: $PARAMS
 ```
 
-**Frontmatter 字段说明：**
+**Frontmatter Fields:**
 
-| 字段 | 说明 | 必需 |
-|------|------|------|
-| `id` | Skill 唯一标识 | 是 |
-| `summary` | 简短描述 | 是 |
-| `activators` | 触发词列表 | 否（默认使用 `/id`） |
-| `tools` | 允许使用的工具 | 否 |
-| `param-guide` | 参数提示 | 否 |
-| `param-names` | 参数名列表（用于 `$NAME` 替换） | 否 |
-| `exec-mode` | 执行模式：`direct` 或 `isolated` | 否 |
-| `visible` | 是否在列表中显示 | 否 |
+| Field | Description | Required |
+|-------|-------------|----------|
+| `id` | Unique skill identifier | Yes |
+| `summary` | Short description | Yes |
+| `activators` | Trigger word list | No (defaults to `/id`) |
+| `tools` | Allowed tools | No |
+| `param-guide` | Parameter hint | No |
+| `param-names` | Parameter name list (for `$NAME` substitution) | No |
+| `exec-mode` | Execution mode: `direct` or `isolated` | No |
+| `visible` | Whether to show in list | No |
 
-**模板占位符：**
+**Template Placeholders:**
 
-- `$PARAMS` 或 `$ARGUMENTS` - 用户输入的完整参数字符串
-- `$NAME` - 对应 `param-names` 中的命名参数（大写）
+- `$PARAMS` or `$ARGUMENTS` - Complete parameter string from user
+- `$NAME` - Named parameter corresponding to `param-names` (uppercase)
 
 ---
 
-## 开发指南
+## Development Guide
 
-### 运行测试
+### Running Tests
 
 ```bash
-# 运行所有测试
+# Run all tests
 python3.11 -m pytest tests/ -v
 
-# 运行特定测试
+# Run specific tests
 python3.11 -m pytest tests/test_core.py -v
 ```
 
-### 代码检查
+### Code Formatting
 
 ```bash
-# 格式化代码
+# Format code
 python3.11 -m ruff format src/
 
-# 检查代码
+# Check code
 python3.11 -m ruff check src/
 ```
 
-### 添加新工具
+### Adding New Tools
 
 ```python
 from feinn_agent.tools.registry import register
 
 @register(
     name="my_tool",
-    description="工具描述",
+    description="Tool description",
     input_schema={
         "type": "object",
         "properties": {
@@ -426,23 +430,23 @@ from feinn_agent.tools.registry import register
     }
 )
 async def my_tool(param: str) -> str:
-    """工具实现"""
-    return f"结果: {param}"
+    """Tool implementation"""
+    return f"Result: {param}"
 ```
 
 ---
 
-## 文档
+## Documentation
 
-- [vLLM 部署指南](docs/vllm-deployment.md) - 自托管模型部署
-- [SiliconFlow 配置](docs/siliconflow-setup.md) - 国内 API 平台使用
-- [Azure OpenAI 配置](docs/azure-openai-setup.md) - 企业 Azure 部署
+- [vLLM Deployment Guide](docs/vllm-deployment.md) - Self-hosted model deployment
+- [SiliconFlow Setup](docs/siliconflow-setup.md) - China API platform usage
+- [Azure OpenAI Setup](docs/azure-openai-setup.md) - Enterprise Azure deployment
 
 ---
 
-## 许可证
+## License
 
-Apache License 2.0 - 详见 [LICENSE](LICENSE) 文件
+Apache License 2.0 - See [LICENSE](LICENSE) file for details
 
 ---
 

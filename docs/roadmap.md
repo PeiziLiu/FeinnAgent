@@ -1,182 +1,182 @@
-# FeinnAgent 开发路线图
+# FeinnAgent Development Roadmap
 
-## 概述
+## Overview
 
-本文档概述 FeinnAgent 的开发路线图，包括版本规划、里程碑和长期愿景。
+This document outlines FeinnAgent's development roadmap, including version planning, milestones, and long-term vision.
 
 ---
 
-## 版本规划
+## Version Planning
 
-### v1.0.0 - 基础版本（当前）
+### v1.0.0 - Foundation (Current)
 
-**目标**: 构建稳定可用的基础框架
+**Goal**: Build a stable, usable foundation framework
 
-**状态**: 开发中
+**Status**: In Development
 
-**核心功能**:
-- [x] 多模型支持（OpenAI、Anthropic）
-- [x] 基础工具系统（20个内置工具）
-- [x] 上下文管理（滑动窗口）
-- [x] 上下文压缩引擎
-- [x] 双作用域内存系统
-- [x] DAG 任务编排
-- [x] 并发子代理系统
-- [x] 权限控制系统
-- [x] MCP 协议支持
+**Core Features**:
+- [x] Multi-model support (OpenAI, Anthropic)
+- [x] Basic tool system (20 built-in tools)
+- [x] Context management (sliding window)
+- [x] Context compression engine
+- [x] Dual-scope memory system
+- [x] DAG task orchestration
+- [x] Concurrent sub-agent system
+- [x] Permission control system
+- [x] MCP protocol support
 - [x] RESTful API
-- [x] CLI 工具
-- [x] 完整测试套件
+- [x] CLI tool
+- [x] Complete test suite
 
-**交付物**:
-- 核心框架代码
-- API 服务
-- CLI 工具
-- 基础文档
-
----
-
-### v1.1.0 - 稳定性增强
-
-**目标**: 提升稳定性和性能
-
-**预计时间**: 2026 Q2
-
-**功能特性**:
-- [ ] 流式响应优化
-  - SSE 完整实现
-  - WebSocket 支持
-  - 增量生成优化
-  
-- [ ] 性能优化
-  - 连接池优化
-  - 数据库查询优化
-  - 缓存策略改进
-  
-- [ ] 监控与可观测性
-  - Prometheus 指标
-  - Grafana 仪表盘
-  - 分布式追踪
-  
-- [ ] 日志增强
-  - 结构化日志
-  - 日志分级优化
-  - 日志聚合支持
-
-**技术债务**:
-- [ ] 完善错误处理
-- [ ] 增加边界测试
-- [ ] 代码重构优化
+**Deliverables**:
+- Core framework code
+- API service
+- CLI tool
+- Basic documentation
 
 ---
 
-### v1.2.0 - 企业级特性
+### v1.1.0 - Stability Enhancement
 
-**目标**: 满足企业级部署需求
+**Goal**: Improve stability and performance
 
-**预计时间**: 2026 Q3
+**Estimated Time**: 2026 Q2
 
-**功能特性**:
-- [ ] 认证与授权
-  - JWT/OAuth2 支持
-  - RBAC 权限模型
-  - API 密钥管理
+**Features**:
+- [ ] Streaming response optimization
+  - Full SSE implementation
+  - WebSocket support
+  - Incremental generation optimization
   
-- [ ] 多租户支持
-  - 租户隔离
-  - 资源配额
-  - 计费集成
+- [ ] Performance optimization
+  - Connection pool optimization
+  - Database query optimization
+  - Caching strategy improvements
   
-- [ ] 高可用架构
-  - 集群模式
-  - 会话亲和性
-  - 故障转移
+- [ ] Monitoring and observability
+  - Prometheus metrics
+  - Grafana dashboards
+  - Distributed tracing
   
-- [ ] 数据安全
-  - 数据加密（传输+存储）
-  - 密钥管理服务
-  - 审计日志
+- [ ] Logging enhancement
+  - Structured logging
+  - Log level optimization
+  - Log aggregation support
+
+**Technical Debt**:
+- [ ] Improve error handling
+- [ ] Add boundary tests
+- [ ] Code refactoring
 
 ---
 
-### v1.3.0 - 高级 Agent 能力
+### v1.2.0 - Enterprise Features
 
-**目标**: 增强 Agent 智能和自主性
+**Goal**: Meet enterprise deployment requirements
 
-**预计时间**: 2026 Q4
+**Estimated Time**: 2026 Q3
 
-**功能特性**:
-- [ ] 高级上下文管理
-  - 分层记忆（短期/长期/工作记忆）
-  - 记忆检索增强
-  - 知识图谱集成
+**Features**:
+- [ ] Authentication and authorization
+  - JWT/OAuth2 support
+  - RBAC permission model
+  - API key management
   
-- [ ] 自主规划
-  - 目标分解
-  - 动态规划
-  - 反思与修正
+- [ ] Multi-tenancy support
+  - Tenant isolation
+  - Resource quotas
+  - Billing integration
   
-- [ ] 多 Agent 协作
-  - Agent 通信协议
-  - 角色分配
-  - 共识机制
+- [ ] High availability architecture
+  - Cluster mode
+  - Session affinity
+  - Failover
   
-- [ ] 工具增强
-  - 浏览器自动化
-  - 代码执行沙箱
-  - 图像处理
+- [ ] Data security
+  - Data encryption (in transit + at rest)
+  - Key management service
+  - Audit logging
 
 ---
 
-### v2.0.0 - 平台化
+### v1.3.0 - Advanced Agent Capabilities
 
-**目标**: 构建完整的 Agent 平台
+**Goal**: Enhance Agent intelligence and autonomy
 
-**预计时间**: 2027 Q1-Q2
+**Estimated Time**: 2026 Q4
 
-**功能特性**:
-- [ ] 可视化界面
+**Features**:
+- [ ] Advanced context management
+  - Hierarchical memory (short-term/long-term/working)
+  - Memory retrieval enhancement
+  - Knowledge graph integration
+  
+- [ ] Autonomous planning
+  - Goal decomposition
+  - Dynamic planning
+  - Reflection and correction
+  
+- [ ] Multi-agent collaboration
+  - Agent communication protocol
+  - Role assignment
+  - Consensus mechanism
+  
+- [ ] Tool enhancement
+  - Browser automation
+  - Code execution sandbox
+  - Image processing
+
+---
+
+### v2.0.0 - Platformization
+
+**Goal**: Build a complete Agent platform
+
+**Estimated Time**: 2027 Q1-Q2
+
+**Features**:
+- [ ] Visual interface
   - Web UI
-  - 对话管理界面
-  - 监控仪表盘
+  - Conversation management interface
+  - Monitoring dashboard
   
-- [ ] 工作流编排
-  - 可视化工作流设计器
-  - 预置模板
-  - 版本管理
+- [ ] Workflow orchestration
+  - Visual workflow designer
+  - Pre-built templates
+  - Version management
   
-- [ ] 插件生态
-  - 插件市场
-  - 第三方集成
-  - 自定义工具
+- [ ] Plugin ecosystem
+  - Plugin marketplace
+  - Third-party integrations
+  - Custom tools
   
-- [ ] 模型管理
-  - 模型微调
-  - 模型评估
-  - A/B 测试
+- [ ] Model management
+  - Model fine-tuning
+  - Model evaluation
+  - A/B testing
 
 ---
 
-## 长期愿景
+## Long-term Vision
 
-### 2027 年目标
+### 2027 Goals
 
-1. **成为企业首选 Agent 框架**
-   - 稳定、安全、可扩展
-   - 丰富的企业级特性
-   - 完善的生态支持
+1. **Become the Enterprise Agent Framework of Choice**
+   - Stable, secure, scalable
+   - Rich enterprise features
+   - Complete ecosystem support
 
-2. **构建活跃的开发者社区**
-   - 开源贡献指南
-   - 插件生态系统
-   - 定期社区活动
+2. **Build an Active Developer Community**
+   - Open source contribution guidelines
+   - Plugin ecosystem
+   - Regular community events
 
-3. **支持多模态 Agent**
-   - 文本、图像、音频
-   - 多模态理解
-   - 跨模态推理
+3. **Support Multi-modal Agents**
+   - Text, image, audio
+   - Multi-modal understanding
+   - Cross-modal reasoning
 
-### 技术愿景
+### Technical Vision
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -189,17 +189,17 @@
 │                                                              │
 │  ┌────────────────────────────────────────────────────────┐ │
 │  │              Workflow Engine                            │ │
-│  │  (可视化编排 · 模板市场 · 版本管理)                      │ │
+│  │  (Visual Orchestration · Template Marketplace · Version)│ │
 │  └────────────────────────────────────────────────────────┘ │
 │                                                              │
 │  ┌────────────────────────────────────────────────────────┐ │
 │  │              Multi-Agent Orchestration                  │ │
-│  │  (协作协议 · 角色管理 · 共识机制)                        │ │
+│  │  (Collaboration Protocol · Role Management · Consensus) │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                                                              │
 │  ┌────────────────────────────────────────────────────────┐ │
 │  │              Core Agent Engine                          │ │
-│  │  (规划 · 记忆 · 工具 · 学习)                            │ │
+│  │  (Planning · Memory · Tools · Learning)                 │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                                                              │
 │  ┌────────────────────────────────────────────────────────┐ │
@@ -212,21 +212,21 @@
 
 ---
 
-## 里程碑
+## Milestones
 
-| 里程碑 | 日期 | 关键交付物 |
-|--------|------|-----------|
-| Alpha | 2026-04 | 基础框架可用，核心功能完成 |
-| Beta | 2026-06 | API 稳定，文档完善，社区预览 |
-| v1.0 GA | 2026-07 | 生产就绪，企业级特性 |
-| v1.5 | 2026-10 | 高级 Agent 能力，多模态支持 |
-| v2.0 | 2027-04 | 平台化，完整生态 |
+| Milestone | Date | Key Deliverables |
+|-----------|------|------------------|
+| Alpha | 2026-04 | Foundation framework available, core features complete |
+| Beta | 2026-06 | API stable, documentation complete, community preview |
+| v1.0 GA | 2026-07 | Production-ready, enterprise features |
+| v1.5 | 2026-10 | Advanced Agent capabilities, multi-modal support |
+| v2.0 | 2027-04 | Platformization, complete ecosystem |
 
 ---
 
-## 技术演进路线
+## Technical Evolution Path
 
-### 第一阶段：基础架构（v1.0）
+### Phase 1: Foundation Architecture (v1.0)
 
 ```
 Core Components
@@ -238,7 +238,7 @@ Core Components
 └── Subagent System (concurrent)
 ```
 
-### 第二阶段：性能优化（v1.1-v1.2）
+### Phase 2: Performance Optimization (v1.1-v1.2)
 
 ```
 Performance Enhancements
@@ -249,7 +249,7 @@ Performance Enhancements
 └── Resource Management
 ```
 
-### 第三阶段：智能化（v1.3-v2.0）
+### Phase 3: Intelligence (v1.3-v2.0)
 
 ```
 Intelligence Features
@@ -262,51 +262,51 @@ Intelligence Features
 
 ---
 
-## 社区路线图
+## Community Roadmap
 
-### 开源策略
+### Open Source Strategy
 
-| 阶段 | 时间 | 活动 |
-|------|------|------|
-| 内测 | 2026-04 | 核心团队开发 |
-| 公测 | 2026-06 | GitHub 开源，社区反馈 |
-| 成长 | 2026-09 | 贡献者计划，插件大赛 |
-| 成熟 | 2027-01 | 核心贡献者团队，基金会 |
+| Phase | Time | Activities |
+|-------|------|------------|
+| Internal Beta | 2026-04 | Core team development |
+| Public Beta | 2026-06 | GitHub open source, community feedback |
+| Growth | 2026-09 | Contributor program, plugin competition |
+| Maturity | 2027-01 | Core contributor team, foundation |
 
-### 文档计划
+### Documentation Plan
 
-- [x] API 文档（自动生成）
-- [x] 架构文档
-- [x] 开发指南
-- [ ] 教程系列
-- [ ] 最佳实践
-- [ ] 案例研究
-- [ ] 视频教程
-
----
-
-## 风险评估
-
-| 风险 | 影响 | 缓解措施 |
-|------|------|----------|
-| LLM API 变化 | 高 | 抽象层设计，快速适配 |
-| 竞争产品 | 中 | 差异化定位，企业级特性 |
-| 资源不足 | 中 | 开源社区，渐进式开发 |
-| 技术债务 | 中 | 定期重构，测试覆盖 |
+- [x] API documentation (auto-generated)
+- [x] Architecture documentation
+- [x] Development guide
+- [ ] Tutorial series
+- [ ] Best practices
+- [ ] Case studies
+- [ ] Video tutorials
 
 ---
 
-## 附录
+## Risk Assessment
 
-### 参考资源
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| LLM API changes | High | Abstraction layer design, rapid adaptation |
+| Competitive products | Medium | Differentiated positioning, enterprise features |
+| Insufficient resources | Medium | Open source community, incremental development |
+| Technical debt | Medium | Regular refactoring, test coverage |
+
+---
+
+## Appendix
+
+### Reference Resources
 
 - [OpenAI API](https://platform.openai.com/docs)
 - [Anthropic API](https://docs.anthropic.com/)
 - [MCP Protocol](https://modelcontextprotocol.io/)
 - [FastAPI](https://fastapi.tiangolo.com/)
 
-### B. 修订历史
+### Revision History
 
-| 版本 | 日期 | 作者 | 变更 |
-|------|------|------|------|
-| 1.0 | 2026-04-11 | Feinn Team | 初始版本 |
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | 2026-04-11 | Feinn Team | Initial version |

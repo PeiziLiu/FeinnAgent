@@ -1,300 +1,300 @@
-# FeinnAgent 需求设计文档
+# FeinnAgent Requirements Design Document
 
-## 1. 项目概述
+## 1. Project Overview
 
-### 1.1 项目背景
+### 1.1 Project Background
 
-随着大型语言模型(LLM)能力的快速发展，AI Agent 正在成为自动化复杂任务的核心技术。企业级场景对 Agent 提出了更高要求：多并发处理能力、稳定的长时间运行、灵活的任务编排、以及完善的安全控制。
+With the rapid development of Large Language Model (LLM) capabilities, AI Agents are becoming the core technology for automating complex tasks. Enterprise scenarios impose higher requirements on Agents: multi-concurrency processing capabilities, stable long-running operations, flexible task orchestration, and comprehensive security controls.
 
-FeinnAgent 旨在构建一个**企业级、多并发、可扩展**的 AI Agent 框架，满足生产环境的高性能、高可靠性需求。
+FeinnAgent aims to build an **enterprise-grade, multi-concurrency, scalable** AI Agent framework that meets the high performance and reliability requirements of production environments.
 
-### 1.2 设计目标
+### 1.2 Design Goals
 
-| 目标 | 描述 | 优先级 |
-|------|------|--------|
-| 企业级并发 | 支持多会话并行处理，资源隔离 | P0 |
-| 长对话稳定 | 智能上下文压缩，避免窗口溢出 | P0 |
-| 任务编排 | DAG 任务管理，支持复杂工作流 | P1 |
-| 子代理协作 | 并发子代理，任务并行分解 | P1 |
-| 多模型支持 | 统一接口，支持任意 LLM 提供商 | P0 |
-| 安全可控 | 细粒度权限，审计日志 | P1 |
-| 易扩展 | 模块化设计，插件化工具 | P2 |
+| Goal | Description | Priority |
+|------|-------------|----------|
+| Enterprise Concurrency | Support parallel session processing with resource isolation | P0 |
+| Long Conversation Stability | Intelligent context compression to avoid window overflow | P0 |
+| Task Orchestration | DAG task management supporting complex workflows | P1 |
+| Sub-agent Collaboration | Concurrent sub-agents for parallel task decomposition | P1 |
+| Multi-Model Support | Unified interface supporting any LLM provider | P0 |
+| Security & Control | Fine-grained permissions, audit logs | P1 |
+| Easy Extension | Modular design, plugin-based tools | P2 |
 
-### 1.3 参考项目
+### 1.3 Reference Projects
 
-- **CheetahClaws**: Python Agent 架构，Plan 模式设计
-- **Claude Code**: 工具系统、交互设计、MCP 集成
-- **Hermes Agent**: 企业级特性、多平台网关、RL 训练
+- **CheetahClaws**: Python Agent architecture, Plan mode design
+- **Claude Code**: Tool system, interaction design, MCP integration
+- **Hermes Agent**: Enterprise features, multi-platform gateway, RL training
 
 ---
 
-## 2. 功能需求
+## 2. Functional Requirements
 
-### 2.1 核心功能
+### 2.1 Core Features
 
-#### 2.1.1 对话管理
+#### 2.1.1 Conversation Management
 
-| ID | 需求 | 描述 | 验收标准 |
-|----|------|------|----------|
-| F-001 | 多轮对话 | 支持与用户的持续交互 | 保持上下文，支持 50+ 轮对话 |
-| F-002 | 工具调用 | LLM 可调用外部工具 | 支持 20+ 内置工具 |
-| F-003 | 流式响应 | 实时返回生成内容 | SSE 推送，延迟 < 100ms |
-| F-004 | 对话持久化 | 保存和恢复对话历史 | SQLite 存储，支持搜索 |
+| ID | Requirement | Description | Acceptance Criteria |
+|----|-------------|-------------|---------------------|
+| F-001 | Multi-turn Conversation | Support continuous user interaction | Maintain context, support 50+ turns |
+| F-002 | Tool Invocation | LLM can call external tools | Support 20+ built-in tools |
+| F-003 | Streaming Response | Real-time content generation | SSE push, latency < 100ms |
+| F-004 | Conversation Persistence | Save and restore conversation history | SQLite storage, search support |
 
-#### 2.1.2 工具系统
+#### 2.1.2 Tool System
 
-| ID | 需求 | 描述 | 验收标准 |
-|----|------|------|----------|
-| F-011 | 文件操作 | 读写编辑文件 | 支持大文件(>1MB)分块处理 |
-| F-012 | 代码搜索 | Glob/Grep 搜索 | 支持正则，结果可配置 |
-| F-013 | Web 访问 | 获取网页内容 | 支持 JS 渲染页面 |
-| F-014 | 命令执行 | Bash 命令执行 | 超时控制，输出截断 |
-| F-015 | 工具注册 | 动态注册新工具 | 装饰器方式，自动发现 |
-| F-016 | MCP 支持 | 接入 MCP 服务 | 支持 stdio/sse 传输 |
+| ID | Requirement | Description | Acceptance Criteria |
+|----|-------------|-------------|---------------------|
+| F-011 | File Operations | Read/write/edit files | Support large files (>1MB) with chunking |
+| F-012 | Code Search | Glob/Grep search | Regex support, configurable results |
+| F-013 | Web Access | Fetch web content | Support JS-rendered pages |
+| F-014 | Command Execution | Bash command execution | Timeout control, output truncation |
+| F-015 | Tool Registration | Dynamically register new tools | Decorator pattern, auto-discovery |
+| F-016 | MCP Support | Connect to MCP services | Support stdio/sse transport |
 
-#### 2.1.3 上下文管理
+#### 2.1.3 Context Management
 
-| ID | 需求 | 描述 | 验收标准 |
-|----|------|------|----------|
-| F-021 | 长度检测 | 监控上下文长度 | 实时计算 token 数 |
-| F-022 | 智能压缩 | 自动压缩历史消息 | 保留关键信息 |
-| F-023 | 分层策略 | 多级压缩策略 | 摘要→截断→丢弃 |
-| F-024 | 用户控制 | 可配置压缩参数 | 阈值、策略可调 |
+| ID | Requirement | Description | Acceptance Criteria |
+|----|-------------|-------------|---------------------|
+| F-021 | Length Detection | Monitor context length | Real-time token counting |
+| F-022 | Smart Compression | Auto-compress history messages | Preserve key information |
+| F-023 | Hierarchical Strategy | Multi-level compression strategy | Summary → Truncate → Drop |
+| F-024 | User Control | Configurable compression parameters | Adjustable threshold, strategy |
 
-### 2.2 企业级特性
+### 2.2 Enterprise Features
 
-#### 2.2.1 并发处理
+#### 2.2.1 Concurrency Processing
 
-| ID | 需求 | 描述 | 验收标准 |
-|----|------|------|----------|
-| F-031 | 多会话并发 | 同时处理多个会话 | 100+ 并发连接 |
-| F-032 | 资源隔离 | 会话间资源隔离 | 内存、CPU 限制 |
-| F-033 | 流控机制 | 请求速率控制 | 令牌桶算法 |
-| F-034 | 负载均衡 | 多实例负载分发 | 支持水平扩展 |
+| ID | Requirement | Description | Acceptance Criteria |
+|----|-------------|-------------|---------------------|
+| F-031 | Multi-Session Concurrency | Process multiple sessions simultaneously | 100+ concurrent connections |
+| F-032 | Resource Isolation | Resource isolation between sessions | Memory, CPU limits |
+| F-033 | Flow Control | Request rate limiting | Token bucket algorithm |
+| F-034 | Load Balancing | Multi-instance load distribution | Support horizontal scaling |
 
-#### 2.2.2 任务系统
+#### 2.2.2 Task System
 
-| ID | 需求 | 描述 | 验收标准 |
-|----|------|------|----------|
-| F-041 | 任务创建 | 创建可追踪任务 | UUID 标识，元数据 |
-| F-042 | 依赖管理 | 任务间依赖关系 | DAG 结构，自动排序 |
-| F-043 | 状态追踪 | 任务状态机 | pending/running/completed/failed |
-| F-044 | 优先级 | 任务优先级调度 | 高优先级优先执行 |
-| F-045 | 并发控制 | 限制并行任务数 | 信号量控制 |
+| ID | Requirement | Description | Acceptance Criteria |
+|----|-------------|-------------|---------------------|
+| F-041 | Task Creation | Create trackable tasks | UUID identification, metadata |
+| F-042 | Dependency Management | Inter-task dependency relationships | DAG structure, auto-sorting |
+| F-043 | State Tracking | Task state machine | pending/running/completed/failed |
+| F-044 | Priority | Task priority scheduling | High priority first |
+| F-045 | Concurrency Control | Limit parallel task count | Semaphore control |
 
-#### 2.2.3 子代理系统
+#### 2.2.3 Sub-agent System
 
-| ID | 需求 | 描述 | 验收标准 |
-|----|------|------|----------|
-| F-051 | 子代理创建 | 动态创建子代理 | 指定类型、配置 |
-| F-052 | 并行执行 | 多子代理并发运行 | asyncio 并发 |
-| F-053 | 结果收集 | 聚合子代理结果 | 超时处理，错误处理 |
-| F-054 | 类型系统 | 预定义代理类型 | analyzer/coder/reviewer |
-| F-055 | 资源管理 | 子代理生命周期 | 自动清理，资源回收 |
+| ID | Requirement | Description | Acceptance Criteria |
+|----|-------------|-------------|---------------------|
+| F-051 | Sub-agent Creation | Dynamically create sub-agents | Specify type, configuration |
+| F-052 | Parallel Execution | Multiple sub-agents run concurrently | asyncio concurrency |
+| F-053 | Result Collection | Aggregate sub-agent results | Timeout handling, error handling |
+| F-054 | Type System | Predefined agent types | analyzer/coder/reviewer |
+| F-055 | Resource Management | Sub-agent lifecycle | Auto-cleanup, resource recovery |
 
-#### 2.2.4 内存系统
+#### 2.2.4 Memory System
 
-| ID | 需求 | 描述 | 验收标准 |
-|----|------|------|----------|
-| F-061 | Workspace 内存 | 项目级知识存储 | 跨会话共享 |
-| F-062 | Agent 内存 | 会话级临时记忆 | 隔离存储 |
-| F-063 | 语义搜索 | 向量相似度搜索 | 余弦相似度 |
-| F-064 | 内存管理 | CRUD 操作 | 完整的生命周期管理 |
+| ID | Requirement | Description | Acceptance Criteria |
+|----|-------------|-------------|---------------------|
+| F-061 | Workspace Memory | Project-level knowledge storage | Cross-session sharing |
+| F-062 | Agent Memory | Session-level temporary memory | Isolated storage |
+| F-063 | Semantic Search | Vector similarity search | Cosine similarity |
+| F-064 | Memory Management | CRUD operations | Complete lifecycle management |
 
-#### 2.2.5 权限控制
+#### 2.2.5 Permission Control
 
-| ID | 需求 | 描述 | 验收标准 |
-|----|------|------|----------|
-| F-071 | 权限模式 | 三种审批模式 | accept_all/auto/confirm_all |
-| F-072 | 工具分类 | 工具风险分级 | read-only/destructive |
-| F-073 | 审批流程 | 人工确认机制 | 交互式确认 |
-| F-074 | 审计日志 | 操作记录 | 完整可追溯 |
+| ID | Requirement | Description | Acceptance Criteria |
+|----|-------------|-------------|---------------------|
+| F-071 | Permission Mode | Three approval modes | accept_all/auto/confirm_all |
+| F-072 | Tool Classification | Tool risk grading | read-only/destructive |
+| F-073 | Approval Process | Manual confirmation mechanism | Interactive confirmation |
+| F-074 | Audit Log | Operation records | Complete traceability |
 
-### 2.3 接口需求
+### 2.3 Interface Requirements
 
 #### 2.3.1 REST API
 
-| ID | 需求 | 描述 | 验收标准 |
-|----|------|------|----------|
-| F-081 | 会话管理 | 创建/删除/列表 | CRUD 完整 |
-| F-082 | 消息发送 | 发送用户消息 | 异步处理 |
-| F-083 | SSE 推送 | 服务器推送 | 实时事件流 |
-| F-084 | 任务管理 | 任务 CRUD | 完整生命周期 |
-| F-085 | 内存操作 | 内存 CRUD | 双作用域支持 |
+| ID | Requirement | Description | Acceptance Criteria |
+|----|-------------|-------------|---------------------|
+| F-081 | Session Management | Create/delete/list | Full CRUD |
+| F-082 | Message Sending | Send user messages | Async processing |
+| F-083 | SSE Push | Server push | Real-time event stream |
+| F-084 | Task Management | Task CRUD | Complete lifecycle |
+| F-085 | Memory Operations | Memory CRUD | Dual-scope support |
 
 #### 2.3.2 CLI
 
-| ID | 需求 | 描述 | 验收标准 |
-|----|------|------|----------|
-| F-091 | 交互模式 | 持续对话 | 类似 ChatGPT CLI |
-| F-092 | 单条执行 | 一次性任务 | 适合脚本调用 |
-| F-093 | 服务启动 | 启动 API 服务 | 生产部署 |
-| F-094 | 配置管理 | 查看/修改配置 | 持久化存储 |
+| ID | Requirement | Description | Acceptance Criteria |
+|----|-------------|-------------|---------------------|
+| F-091 | Interactive Mode | Continuous conversation | Similar to ChatGPT CLI |
+| F-092 | Single Execution | One-time tasks | Suitable for script calls |
+| F-093 | Service Start | Start API service | Production deployment |
+| F-094 | Configuration Management | View/modify configuration | Persistent storage |
 
 ---
 
-## 3. 非功能需求
+## 3. Non-Functional Requirements
 
-### 3.1 性能需求
+### 3.1 Performance Requirements
 
-| ID | 需求 | 目标值 |
-|----|------|--------|
-| NF-001 | 响应延迟 | P95 < 2s (首 token) |
-| NF-002 | 吞吐量 | 100+ TPS |
-| NF-003 | 并发连接 | 1000+ WebSocket |
-| NF-004 | 内存使用 | < 2GB (单实例) |
-| NF-005 | 启动时间 | < 5s |
+| ID | Requirement | Target |
+|----|-------------|--------|
+| NF-001 | Response Latency | P95 < 2s (first token) |
+| NF-002 | Throughput | 100+ TPS |
+| NF-003 | Concurrent Connections | 1000+ WebSocket |
+| NF-004 | Memory Usage | < 2GB (single instance) |
+| NF-005 | Startup Time | < 5s |
 
-### 3.2 可靠性需求
+### 3.2 Reliability Requirements
 
-| ID | 需求 | 目标值 |
-|----|------|--------|
-| NF-011 | 可用性 | 99.9% |
-| NF-012 | 故障恢复 | 自动重启，状态恢复 |
-| NF-013 | 数据持久化 | 零数据丢失 |
-| NF-014 | 优雅关闭 | 处理完当前请求 |
+| ID | Requirement | Target |
+|----|-------------|--------|
+| NF-011 | Availability | 99.9% |
+| NF-012 | Fault Recovery | Auto-restart, state recovery |
+| NF-013 | Data Persistence | Zero data loss |
+| NF-014 | Graceful Shutdown | Complete current requests |
 
-### 3.3 安全需求
+### 3.3 Security Requirements
 
-| ID | 需求 | 描述 |
-|----|------|------|
-| NF-021 | 输入验证 | 所有输入参数校验 |
-| NF-022 | 命令白名单 | Bash 命令限制 |
-| NF-023 | 路径限制 | 文件访问沙箱 |
-| NF-024 | 密钥管理 | 安全存储 API Key |
-| NF-025 | 审计日志 | 完整操作记录 |
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| NF-021 | Input Validation | All input parameter validation |
+| NF-022 | Command Whitelist | Bash command restrictions |
+| NF-023 | Path Restrictions | File access sandbox |
+| NF-024 | Key Management | Secure API Key storage |
+| NF-025 | Audit Logging | Complete operation records |
 
-### 3.4 可维护性需求
+### 3.4 Maintainability Requirements
 
-| ID | 需求 | 描述 |
-|----|------|------|
-| NF-031 | 代码覆盖 | > 80% 测试覆盖 |
-| NF-032 | 文档完整 | API/架构/开发文档 |
-| NF-033 | 日志分级 | DEBUG/INFO/WARNING/ERROR |
-| NF-034 | 监控指标 | Prometheus 指标 |
-
----
-
-## 4. 用户场景
-
-### 4.1 场景一：代码审查助手
-
-**角色**: 开发团队
-**场景**: 自动审查 PR，检查代码质量、安全漏洞
-
-```
-1. 开发者提交 PR
-2. FeinnAgent 触发代码审查子代理
-3. 并行执行：
-   - 代码风格检查
-   - 安全漏洞扫描
-   - 性能分析
-   - 测试覆盖检查
-4. 聚合结果，生成审查报告
-5. 自动评论到 PR
-```
-
-### 4.2 场景二：智能客服
-
-**角色**: 客服团队
-**场景**: 7x24 自动回复客户咨询
-
-```
-1. 客户发送问题
-2. FeinnAgent 检索知识库
-3. 分析问题意图
-4. 调用相应工具查询信息
-5. 生成回复并发送
-6. 复杂问题转人工
-```
-
-### 4.3 场景三：数据分析助手
-
-**角色**: 数据分析师
-**场景**: 自动化数据处理流程
-
-```
-1. 用户上传数据文件
-2. FeinnAgent 分析数据结构
-3. 创建数据处理任务链：
-   - 数据清洗
-   - 特征工程
-   - 模型训练
-   - 结果可视化
-4. 并行执行独立任务
-5. 汇总分析结果
-```
-
-### 4.4 场景四：DevOps 助手
-
-**角色**: 运维工程师
-**场景**: 自动化部署和监控
-
-```
-1. 接收部署指令
-2. 检查环境状态
-3. 执行部署任务：
-   - 代码拉取
-   - 依赖安装
-   - 服务重启
-   - 健康检查
-4. 监控部署状态
-5. 报告结果
-```
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| NF-031 | Code Coverage | > 80% test coverage |
+| NF-032 | Complete Documentation | API/architecture/development docs |
+| NF-033 | Log Levels | DEBUG/INFO/WARNING/ERROR |
+| NF-034 | Monitoring Metrics | Prometheus metrics |
 
 ---
 
-## 5. 约束条件
+## 4. User Scenarios
 
-### 5.1 技术约束
+### 4.1 Scenario 1: Code Review Assistant
 
-- **语言**: Python 3.10+
-- **异步**: 必须使用 asyncio
-- **类型**: 完整类型注解
-- **依赖**: 最小化第三方依赖
+**Role**: Development Team
+**Scenario**: Automatically review PRs, check code quality, security vulnerabilities
 
-### 5.2 部署约束
+```
+1. Developer submits PR
+2. FeinnAgent triggers code review sub-agent
+3. Execute in parallel:
+   - Code style check
+   - Security vulnerability scan
+   - Performance analysis
+   - Test coverage check
+4. Aggregate results, generate review report
+5. Auto-comment on PR
+```
 
-- **容器**: 支持 Docker 部署
-- **编排**: 支持 Kubernetes
-- **配置**: 环境变量 + 配置文件
-- **日志**: stdout/stderr 输出
+### 4.2 Scenario 2: Intelligent Customer Service
 
-### 5.3 合规约束
+**Role**: Customer Service Team
+**Scenario**: 7x24 automatic response to customer inquiries
 
-- **License**: MIT 开源协议
-- **隐私**: 不收集用户数据
-- **安全**: 遵循 OWASP 安全规范
+```
+1. Customer sends question
+2. FeinnAgent searches knowledge base
+3. Analyze question intent
+4. Call appropriate tools to query information
+5. Generate and send response
+6. Escalate complex issues to human
+```
+
+### 4.3 Scenario 3: Data Analysis Assistant
+
+**Role**: Data Analyst
+**Scenario**: Automated data processing workflow
+
+```
+1. User uploads data file
+2. FeinnAgent analyzes data structure
+3. Create data processing task chain:
+   - Data cleaning
+   - Feature engineering
+   - Model training
+   - Result visualization
+4. Execute independent tasks in parallel
+5. Summarize analysis results
+```
+
+### 4.4 Scenario 4: DevOps Assistant
+
+**Role**: Operations Engineer
+**Scenario**: Automated deployment and monitoring
+
+```
+1. Receive deployment command
+2. Check environment status
+3. Execute deployment tasks:
+   - Code pull
+   - Dependency installation
+   - Service restart
+   - Health check
+4. Monitor deployment status
+5. Report results
+```
 
 ---
 
-## 6. 术语表
+## 5. Constraints
 
-| 术语 | 定义 |
-|------|------|
-| Agent | 智能代理，执行任务的 AI 实体 |
-| LLM | 大型语言模型 |
-| MCP | Model Context Protocol，模型上下文协议 |
-| DAG | 有向无环图，用于任务依赖 |
-| SSE | Server-Sent Events，服务器推送事件 |
-| Context Window | 上下文窗口，LLM 处理的最大 token 数 |
-| Tool | 工具，Agent 可调用的外部功能 |
-| Subagent | 子代理，由主代理创建的辅助代理 |
-| Workspace | 工作空间，项目级资源隔离单位 |
+### 5.1 Technical Constraints
+
+- **Language**: Python 3.10+
+- **Async**: Must use asyncio
+- **Types**: Complete type annotations
+- **Dependencies**: Minimize third-party dependencies
+
+### 5.2 Deployment Constraints
+
+- **Container**: Support Docker deployment
+- **Orchestration**: Support Kubernetes
+- **Configuration**: Environment variables + config files
+- **Logging**: stdout/stderr output
+
+### 5.3 Compliance Constraints
+
+- **License**: Apache 2.0 open source license
+- **Privacy**: No user data collection
+- **Security**: Follow OWASP security guidelines
 
 ---
 
-## 7. 附录
+## 6. Glossary
 
-### 7.1 参考文档
+| Term | Definition |
+|------|------------|
+| Agent | Intelligent agent, AI entity that executes tasks |
+| LLM | Large Language Model |
+| MCP | Model Context Protocol |
+| DAG | Directed Acyclic Graph, used for task dependencies |
+| SSE | Server-Sent Events |
+| Context Window | Context window, maximum tokens LLM can process |
+| Tool | Tool, external function that Agent can call |
+| Subagent | Sub-agent, auxiliary agent created by main agent |
+| Workspace | Workspace, project-level resource isolation unit |
 
-- [OpenAI API 文档](https://platform.openai.com/docs)
-- [Anthropic API 文档](https://docs.anthropic.com/)
-- [MCP 协议规范](https://modelcontextprotocol.io/)
-- [FastAPI 文档](https://fastapi.tiangolo.com/)
+---
 
-### 7.2 修订历史
+## 7. Appendix
 
-| 版本 | 日期 | 作者 | 变更内容 |
-|------|------|------|----------|
-| 1.0 | 2026-04-11 | Feinn Team | 初始版本 |
+### 7.1 Reference Documentation
+
+- [OpenAI API Documentation](https://platform.openai.com/docs)
+- [Anthropic API Documentation](https://docs.anthropic.com/)
+- [MCP Protocol Specification](https://modelcontextprotocol.io/)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+
+### 7.2 Revision History
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | 2026-04-11 | Feinn Team | Initial version |

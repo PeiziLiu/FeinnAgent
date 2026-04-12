@@ -1,17 +1,17 @@
-# Azure OpenAI 配置指南
+# Azure OpenAI Setup Guide
 
-## 快速配置
+## Quick Setup
 
-### 1. 环境变量方式
+### 1. Environment Variables
 
 ```bash
-# .env 文件
+# .env file
 AZURE_OPENAI_API_KEY=bbbbcfc845394f2aaeaf25d9ad7d3a7f
 AZURE_OPENAI_URL=https://backups3-northcentralus.openai.azure.com/openai/deployments/gpt-4/chat/completions?api-version=2023-12-01-preview
 DEFAULT_MODEL=azure/gpt-4
 ```
 
-### 2. 代码配置方式
+### 2. Code Configuration
 
 ```python
 from feinn_agent import FeinnAgent
@@ -25,7 +25,7 @@ agent = FeinnAgent(
 )
 ```
 
-## 完整示例
+## Complete Example
 
 ```python
 import asyncio
@@ -48,34 +48,34 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-## 支持的模型
+## Supported Models
 
-Azure OpenAI 部署的模型可以使用以下格式：
+Azure OpenAI deployed models can use the following format:
 
 ```python
-# 格式: azure/{deployment-name}
+# Format: azure/{deployment-name}
 agent = FeinnAgent(model="azure/gpt-4")
 agent = FeinnAgent(model="azure/gpt-4o")
 agent = FeinnAgent(model="azure/gpt-35-turbo")
 ```
 
-## 获取 Azure OpenAI 凭证
+## Getting Azure OpenAI Credentials
 
-1. 登录 [Azure Portal](https://portal.azure.com)
-2. 找到你的 Azure OpenAI 资源
-3. 进入 **Keys and Endpoint** 页面
-4. 复制 **Key** 和 **Endpoint**
-5. 构建完整的 URL：
+1. Log in to [Azure Portal](https://portal.azure.com)
+2. Find your Azure OpenAI resource
+3. Go to the **Keys and Endpoint** page
+4. Copy the **Key** and **Endpoint**
+5. Build the complete URL:
    ```
    {endpoint}/openai/deployments/{deployment-name}/chat/completions?api-version={api-version}
    ```
 
-## API 版本
+## API Versions
 
-支持的 API 版本：
+Supported API versions:
 - `2023-12-01-preview`
 - `2024-02-15-preview`
 - `2024-06-01`
 - `2024-10-01-preview`
 
-在 URL 中指定你需要的版本。
+Specify your required version in the URL.
