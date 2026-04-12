@@ -140,6 +140,8 @@ async def stream(
 ) -> AsyncIterator[TextChunk | ThinkingChunk | AssistantTurn]:
     """Stream from LLM, yielding typed events regardless of provider."""
     info = detect_provider(model)
+    logger.info(f"Streaming from provider: {info.provider}, model: {info.model}")
+    logger.debug(f"Context limit: {info.context_limit}, messages: {len(messages)}, tools: {len(tool_schemas)}")
 
     if info.provider == "anthropic":
         async for event in _stream_anthropic(info, system, messages, tool_schemas, config):
@@ -160,16 +162,24 @@ async def _stream_anthropic(
     config: dict[str, Any],
 ) -> AsyncIterator[TextChunk | ThinkingChunk | AssistantTurn]:
     """Stream using the Anthropic SDK (native tool calling + thinking)."""
+    logger.info(f"Starting Anthropic stream for model: {info.model}")
     try:
         from anthropic import AsyncAnthropic
     except ImportError:
+        logger.error("anthropic package not installed")
         raise ImportError("anthropic package required: pip install anthropic")
 
     api_key = config.get("anthropic_api_key", "") or os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        logger.error("Anthropic API key not configured")
+        raise ValueError("Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable or config.anthropic_api_key")
+
     client = AsyncAnthropic(api_key=api_key)
+    logger.debug("Anthropic client initialized")
 
     # Convert messages to Anthropic format
     api_messages, system_blocks = _to_anthropic_messages(messages, system)
+    logger.debug(f"Converted {len(messages)} messages to Anthropic format")
 
     # Build request kwargs
     kwargs: dict[str, Any] = {
@@ -180,12 +190,14 @@ async def _stream_anthropic(
     }
     if tool_schemas:
         kwargs["tools"] = tool_schemas
+        logger.debug(f"Added {len(tool_schemas)} tools to request")
 
     if config.get("thinking_enabled"):
         kwargs["thinking"] = {
             "type": "enabled",
             "budget_tokens": config.get("thinking_budget", 10_000),
         }
+        logger.debug("Thinking mode enabled")
 
     text_parts: list[str] = []
     thinking_parts: list[str] = []
@@ -193,6 +205,7 @@ async def _stream_anthropic(
     input_tokens = 0
     output_tokens = 0
 
+    logger.info("Sending request to Anthropic API")
     async with client.messages.stream(**kwargs) as stream_resp:
         async for event in stream_resp:
             if event.type == "message_start":
@@ -228,6 +241,7 @@ async def _stream_anthropic(
             if block.type == "tool_use":
                 tool_calls.append(ToolCall(id=block.id, name=block.name, input=block.input))
 
+    logger.info(f"Anthropic stream complete: input_tokens={input_tokens}, output_tokens={output_tokens}, tool_calls={len(tool_calls)}")
     yield AssistantTurn(
         text="".join(text_parts),
         reasoning="".join(thinking_parts),
@@ -257,32 +271,42 @@ async def _stream_openai_compat(
     config: dict[str, Any],
 ) -> AsyncIterator[TextChunk | ThinkingChunk | AssistantTurn]:
     """Stream using any OpenAI-compatible endpoint."""
+    logger.info(f"Starting OpenAI-compatible stream for provider: {info.provider}, model: {info.model}")
     try:
         from openai import AsyncOpenAI
     except ImportError:
+        logger.error("openai package not installed")
         raise ImportError("openai package required: pip install openai")
 
     base_url = get_base_url(info.provider, config)
+    logger.debug(f"Using base_url: {base_url[:50]}..." if base_url else "No base_url configured")
     api_key = config.get(f"{info.provider}_api_key", "") or "unused"
 
     # vLLM may have API key authentication enabled
     if info.provider == "vllm":
         api_key = config.get("vllm_api_key", os.environ.get("VLLM_API_KEY", "unused"))
+        logger.debug(f"vLLM API key configured: {bool(api_key and api_key != 'unused')}")
 
     # Azure OpenAI
     if info.provider == "azure":
         api_key = config.get("azure_api_key", os.environ.get("AZURE_OPENAI_API_KEY", ""))
+        if not api_key:
+            logger.error("Azure OpenAI API key not configured")
+            raise ValueError("Azure OpenAI API key not configured")
 
     # SiliconFlow
     if info.provider == "siliconflow":
         api_key = config.get("siliconflow_api_key", "") or os.environ.get("SILICONFLOW_API_KEY", "")
         if not api_key:
+            logger.error("SiliconFlow API key not configured")
             raise ValueError("SiliconFlow API key not configured. Set SILICONFLOW_API_KEY environment variable or config.siliconflow_api_key")
 
     client = AsyncOpenAI(api_key=api_key, base_url=base_url if base_url else None)
+    logger.debug("OpenAI client initialized")
 
     # Convert messages to OpenAI format
     api_messages = _to_openai_messages(messages, system)
+    logger.debug(f"Converted {len(messages)} messages to OpenAI format")
 
     kwargs: dict[str, Any] = {
         "model": info.model,
@@ -296,12 +320,14 @@ async def _stream_openai_compat(
 
     if tool_schemas:
         kwargs["tools"] = tool_schemas
+        logger.debug(f"Added {len(tool_schemas)} tools to request")
 
     text_parts: list[str] = []
     tc_accum: dict[int, _OAIToolCallAccum] = {}
     input_tokens = 0
     output_tokens = 0
 
+    logger.info(f"Sending request to {info.provider} API")
     response = await client.chat.completions.create(**kwargs)
 
     async for chunk in response:
@@ -347,6 +373,7 @@ async def _stream_openai_compat(
             args = {"raw": acc.arguments}
         tool_calls.append(ToolCall(id=acc.id, name=acc.name, input=args))
 
+    logger.info(f"OpenAI-compatible stream complete: input_tokens={input_tokens}, output_tokens={output_tokens}, tool_calls={len(tool_calls)}")
     yield AssistantTurn(
         text="".join(text_parts),
         reasoning="",

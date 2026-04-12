@@ -110,8 +110,13 @@ def get_api_key(provider: str, config: dict[str, Any]) -> str:
 
 
 def setup_logging(config: dict[str, Any]) -> None:
-    """Setup logging with optional file output."""
+    """Setup logging with optional file output and daily rotation.
+
+    Log files are rotated daily at midnight. Old logs are kept in the same
+    directory with date suffix (e.g., feinn-2026-04-12.log).
+    """
     import logging
+    import logging.handlers
     import sys
 
     log_level = config.get("log_level", "INFO")
@@ -122,7 +127,20 @@ def setup_logging(config: dict[str, Any]) -> None:
     if log_file:
         log_path = Path(log_file).expanduser()
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
+
+        # TimedRotatingFileHandler: rotate daily at midnight
+        # Backup count 30 = keep ~1 month of logs
+        file_handler = logging.handlers.TimedRotatingFileHandler(
+            log_path,
+            when="midnight",
+            interval=1,
+            backupCount=30,
+            encoding="utf-8",
+        )
+        # Custom suffix for rotated files: feinn-2026-04-12.log
+        file_handler.suffix = "%Y-%m-%d.log"
+        file_handler.namer = lambda name: name.replace(".log.", "-")
+        handlers.append(file_handler)
 
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),

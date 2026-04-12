@@ -11,6 +11,7 @@ Supports:
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -18,6 +19,8 @@ from typing import Any
 
 from ..tools.registry import register
 from ..types import ToolDef
+
+logger = logging.getLogger(__name__)
 
 # ── Agent definitions ───────────────────────────────────────────────
 
@@ -149,8 +152,10 @@ class SubAgentManager:
         If wait=True, blocks until the sub-agent finishes and returns the result.
         If wait=False, returns immediately; use check_result() to poll.
         """
+        logger.info(f"Spawning sub-agent: type={agent_type}, wait={wait}, depth={self._current_depth}/{self.max_depth}")
         agent_def = _BUILTIN_AGENTS.get(agent_type)
         if agent_def is None:
+            logger.error(f"Unknown agent type: {agent_type}")
             task = SubAgentTask(
                 task_id=uuid.uuid4().hex[:12],
                 agent_type=agent_type,
@@ -162,6 +167,7 @@ class SubAgentManager:
             return task
 
         if self._current_depth >= self.max_depth:
+            logger.warning(f"Max agent depth ({self.max_depth}) exceeded")
             task = SubAgentTask(
                 task_id=uuid.uuid4().hex[:12],
                 agent_type=agent_type,
@@ -179,6 +185,7 @@ class SubAgentManager:
             model=model or agent_def.model,
         )
         self._tasks[task.task_id] = task
+        logger.debug(f"Created sub-agent task: {task.task_id}")
 
         if wait:
             await self._run_agent(task, agent_def, prompt, config)
@@ -195,18 +202,23 @@ class SubAgentManager:
         config: dict[str, Any],
     ) -> None:
         """Run a sub-agent in a semaphore-controlled context."""
+        logger.info(f"Running sub-agent task: {task.task_id}, type={task.agent_type}")
         async with self._semaphore:
             self._current_depth += 1
             task.status = AgentTaskStatus.RUNNING
+            logger.debug(f"Sub-agent {task.task_id} started (depth={self._current_depth})")
             try:
                 result = await self._execute(agent_def, prompt, config)
                 task.result = result
                 task.status = AgentTaskStatus.DONE
+                logger.info(f"Sub-agent {task.task_id} completed successfully")
             except Exception as e:
                 task.error = str(e)
                 task.status = AgentTaskStatus.ERROR
+                logger.error(f"Sub-agent {task.task_id} failed: {e}")
             finally:
                 self._current_depth -= 1
+                logger.debug(f"Sub-agent {task.task_id} finished (depth={self._current_depth})")
 
     async def _execute(
         self,
@@ -219,17 +231,24 @@ class SubAgentManager:
         from ..context import build_system_prompt
         from ..tools.registry import all_tools, deregister
 
+        logger.info(f"Executing sub-agent: type={agent_def.name}, model={agent_def.model or 'default'}")
+        logger.debug(f"Sub-agent prompt length: {len(prompt)} chars")
+
         # Build sub-agent config
         sub_config = dict(config)
         if agent_def.model:
             sub_config["model"] = agent_def.model
+            logger.debug(f"Sub-agent using custom model: {agent_def.model}")
 
         # Restrict tools if specified
         restricted_tools: list[str] | None = None
         if agent_def.tools:
-            restricted_tools = [t.name for t in all_tools() if t.name not in agent_def.tools]
+            all_available = [t.name for t in all_tools()]
+            restricted_tools = [t for t in all_available if t not in agent_def.tools]
+            logger.info(f"Restricting tools for sub-agent: allowed={agent_def.tools}, restricted={restricted_tools}")
             for name in restricted_tools:
                 deregister(name)
+                logger.debug(f"Deregistered tool: {name}")
 
         try:
             # Build system prompt
@@ -237,35 +256,60 @@ class SubAgentManager:
             system = build_system_prompt(sub_config)
             if extra:
                 system = f"{extra}\n\n{system}"
+                logger.debug(f"Extended system prompt with {len(extra)} extra chars")
+
+            logger.info(f"Starting sub-agent execution with system prompt: {len(system)} chars")
 
             # Run sub-agent
             sub_agent = FeinnAgent(config=sub_config, system_prompt=system)
             result_parts: list[str] = []
+            chunk_count = 0
 
             async for event in sub_agent.run(prompt):
                 from ..types import AgentDone, TextChunk
 
                 if isinstance(event, TextChunk):
                     result_parts.append(event.text)
+                    chunk_count += 1
+                    if chunk_count % 50 == 0:
+                        logger.debug(f"Sub-agent received {chunk_count} text chunks so far")
                 elif isinstance(event, AgentDone):
+                    logger.debug(f"Sub-agent completed after {chunk_count} chunks")
                     break
 
-            return "".join(result_parts)
+            result = "".join(result_parts)
+            logger.info(f"Sub-agent execution complete: result_length={len(result)}, chunks={chunk_count}")
+            return result
+
+        except Exception as e:
+            logger.error(f"Sub-agent execution failed: {e}")
+            raise
 
         finally:
             # Restore deregistered tools
             if restricted_tools:
                 from . import _restore_tools
 
+                logger.debug(f"Restoring {len(restricted_tools)} restricted tools")
                 _restore_tools(restricted_tools)
 
     def check_result(self, task_id: str) -> SubAgentTask | None:
         """Check the status/result of a sub-agent task."""
-        return self._tasks.get(task_id)
+        task = self._tasks.get(task_id)
+        if task:
+            logger.debug(f"Checked task {task_id}: status={task.status.value}")
+        else:
+            logger.warning(f"Task not found: {task_id}")
+        return task
 
     def list_tasks(self) -> list[SubAgentTask]:
         """List all sub-agent tasks."""
-        return list(self._tasks.values())
+        tasks = list(self._tasks.values())
+        status_counts = {}
+        for t in tasks:
+            status_counts[t.status.value] = status_counts.get(t.status.value, 0) + 1
+        logger.debug(f"Listed {len(tasks)} tasks: {status_counts}")
+        return tasks
 
     def list_agent_types(self) -> list[dict[str, str]]:
         """List available agent types."""

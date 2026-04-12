@@ -71,6 +71,7 @@ class FeinnAgent:
         images: list[dict[str, str]] | None = None,
     ) -> AsyncIterator[AgentEvent]:
         """Run the agent loop for a single user message."""
+        logger.info(f"Agent run started: message_length={len(user_message)}, images={len(images) if images else 0}")
         self.state.add_message(Role.USER, content=user_message, images=images or [])
 
         max_iterations = self.config.get("max_iterations", 50)
@@ -78,9 +79,12 @@ class FeinnAgent:
 
         while iteration < max_iterations:
             iteration += 1
+            logger.debug(f"Agent iteration {iteration}/{max_iterations}")
 
             # Check compaction
-            maybe_compact(self.state, self.config)
+            compacted = maybe_compact(self.state, self.config)
+            if compacted:
+                logger.info(f"Context compacted: new_size={len(self.state.messages)} messages")
 
             # Stream from LLM (with retry)
             assistant_text = ""
@@ -118,6 +122,7 @@ class FeinnAgent:
 
             # No tool calls → done
             if not tool_calls:
+                logger.info(f"Agent run complete: turns={self.state.turn_count}, input_tokens={self.state.total_input_tokens}, output_tokens={self.state.total_output_tokens}")
                 yield AgentDone(
                     total_input_tokens=self.state.total_input_tokens,
                     total_output_tokens=self.state.total_output_tokens,
@@ -126,7 +131,9 @@ class FeinnAgent:
                 return
 
             # Execute tool calls
+            logger.info(f"Executing {len(tool_calls)} tool calls: {[tc.name for tc in tool_calls]}")
             tool_results = await self._execute_tools(tool_calls)
+            logger.debug(f"Tool execution complete: {len(tool_results)} results")
 
             # Append tool results
             for tc, result in zip(tool_calls, tool_results):
@@ -138,6 +145,7 @@ class FeinnAgent:
                 )
 
         # Max iterations reached
+        logger.warning(f"Max iterations ({max_iterations}) reached, stopping")
         yield TextChunk(text="\n[Max iterations reached. Stopping.]")
         yield AgentDone(
             total_input_tokens=self.state.total_input_tokens,
@@ -147,6 +155,7 @@ class FeinnAgent:
 
     async def _stream_with_retry(self) -> AsyncIterator[TextChunk | ThinkingChunk | AssistantTurn]:
         """Stream from LLM with exponential backoff on retryable errors."""
+        logger.debug(f"Starting LLM stream with retry: model={self.config.get('model')}, messages={len(self.state.messages)}")
         for attempt in range(_MAX_RETRIES + 1):
             try:
                 async for event in llm_stream(
@@ -157,17 +166,20 @@ class FeinnAgent:
                     config=self.config,
                 ):
                     yield event
+                logger.debug("LLM stream completed successfully")
                 return  # success
             except Exception as e:
                 err_str = str(e).lower()
                 is_retryable = any(kw in err_str for kw in _RETRYABLE_ERRORS)
 
                 if "context_length" in err_str:
+                    logger.warning(f"Context length exceeded, forcing compaction (attempt {attempt + 1})")
                     maybe_compact(self.state, self.config, force=True)
                     if attempt < _MAX_RETRIES:
                         continue
 
                 if not is_retryable or attempt >= _MAX_RETRIES:
+                    logger.error(f"Non-retryable error or max retries reached: {e}")
                     yield TextChunk(text=f"[Error: {e}]")
                     return
 
@@ -189,6 +201,7 @@ class FeinnAgent:
         permitted_batch: list[tuple[str, dict[str, Any]]] = []
         permission_map: dict[int, bool] = {}  # index → permitted?
 
+        logger.debug(f"Checking permissions for {len(tool_calls)} tool calls")
         for i, tc in enumerate(tool_calls):
             allowed = await check_permission(
                 tc.name, tc.input, self.config, self._permission_callback
@@ -196,11 +209,16 @@ class FeinnAgent:
             permission_map[i] = allowed
             if allowed:
                 permitted_batch.append((tc.name, tc.input))
+                logger.debug(f"Tool '{tc.name}' permitted")
+            else:
+                logger.warning(f"Tool '{tc.name}' permission denied")
 
         # Execute all permitted tools in batch
+        logger.info(f"Executing {len(permitted_batch)}/{len(tool_calls)} permitted tools")
         batch_results = (
             await dispatch_batch(permitted_batch, self.config) if permitted_batch else []
         )
+        logger.debug(f"Batch execution complete: {len(batch_results)} results")
 
         # Assemble results in order
         batch_idx = 0
