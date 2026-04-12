@@ -1,7 +1,7 @@
 # FeinnAgent
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/Python-3.11+-blue.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0">
   <img src="https://img.shields.io/badge/FastAPI-0.115+-009688.svg" alt="FastAPI">
   <img src="https://img.shields.io/badge/Pydantic-2.0+-e92063.svg" alt="Pydantic 2.0+">
@@ -14,294 +14,305 @@
 
 ---
 
-## 特性
+## 目录
 
-- **多模型支持**: 原生支持 OpenAI、Anthropic Claude，可扩展至任意 LLM 提供商
-- **企业级并发**: 基于 asyncio 的高性能并发架构，支持多会话并行处理
-- **智能上下文压缩**: 自动检测上下文窗口，智能压缩历史消息，确保长对话稳定性
-- **任务编排系统**: 内置 DAG 任务管理，支持任务依赖、优先级和状态追踪
-- **子代理协作**: 支持并发启动多个子代理，实现复杂任务的并行分解与执行
-- **双作用域内存**: Workspace 级与 Agent 级内存隔离，灵活的知识管理
-- **Skill 系统**: 可复用的提示模板，支持触发器、参数替换和工具限制
-- **权限控制**: 细粒度的工具权限管理，支持自动审批、手动确认和只读模式
-- **MCP 集成**: 原生支持 Model Context Protocol，可接入任意 MCP 服务
-- **RESTful API**: 基于 FastAPI 的高性能 API 服务，支持 SSE 实时推送
-- **CLI 工具**: 功能完善的命令行界面，支持交互式会话和批量任务
+- [安装](#安装)
+- [快速开始](#快速开始)
+- [配置](#配置)
+- [使用模式](#使用模式)
+- [命令参考](#命令参考)
+- [支持模型](#支持模型)
+- [架构特性](#架构特性)
+- [开发指南](#开发指南)
+
+---
+
+## 安装
+
+### 环境要求
+
+- Python 3.11+
+- macOS / Linux / Windows
+
+### 安装步骤
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/your-org/feinn-agent.git
+cd feinn-agent
+
+# 2. 创建虚拟环境
+python3.11 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# 3. 安装依赖
+python3.11 -m pip install -e .
+
+# 4. 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件，配置你的 API 密钥
+```
 
 ---
 
 ## 快速开始
 
-### 安装
+### 1. 配置 API 密钥
+
+编辑 `.env` 文件，选择你要使用的模型提供商：
 
 ```bash
-# 克隆仓库
-git clone https://github.com/your-org/feinn-agent.git
-cd feinn-agent
+# SiliconFlow（推荐，国内可用）
+SILICONFLOW_API_KEY=sk-your-key
+DEFAULT_MODEL=siliconflow/Pro/zai-org/GLM-5.1
 
-# 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# 或 OpenAI
+OPENAI_API_KEY=sk-your-key
+DEFAULT_MODEL=openai/gpt-4o
 
-# 安装依赖
-pip install -e ".[dev]"
+# 或 Anthropic
+ANTHROPIC_API_KEY=sk-ant-your-key
+DEFAULT_MODEL=anthropic/claude-sonnet-4
 
-# 配置环境变量
-cp .env.example .env
-# 编辑 .env 文件，添加你的 API 密钥
+# 或 Azure OpenAI
+AZURE_OPENAI_API_KEY=your-key
+AZURE_OPENAI_URL=https://your-resource.openai.azure.com/...
+DEFAULT_MODEL=azure/gpt-4
+
+# 或 vLLM 自托管
+VLLM_BASE_URL=http://localhost:8000/v1
+DEFAULT_MODEL=vllm/Qwen2.5-72B-Instruct
 ```
 
-### 环境配置
-
-编辑 `.env` 文件：
-
-```env
-# OpenAI
-OPENAI_API_KEY=sk-...
-
-# Anthropic (可选)
-ANTHROPIC_API_KEY=sk-ant-...
-
-# 其他配置
-FEINN_LOG_LEVEL=INFO
-FEINN_DEFAULT_PERMISSION=auto
-```
-
-### 命令行使用
+### 2. 启动交互模式
 
 ```bash
-# 启动交互式会话
-feinn chat
+# 启动交互式会话（推荐）
+feinn -i
 
-# 执行单条命令
-feinn run "分析当前目录的代码结构"
+# 或一次性提问
+feinn "分析当前目录的代码结构"
 
 # 启动 API 服务
-feinn serve --host 0.0.0.0 --port 8000
+feinn --serve
 ```
 
-### API 使用
+### 3. 交互模式使用
 
-```python
-import asyncio
-from feinn_agent import Agent, AgentConfig
+启动 `feinn -i` 后，你会看到：
 
-async def main():
-    config = AgentConfig(
-        model="openai/gpt-4o",
-        permission_mode="auto"
-    )
+```
+  FeinnAgent v0.1.0
+  Model: siliconflow/Pro/zai-org/GLM-5.1
+  Type '/quit' to exit, '/help' for commands
 
-    agent = Agent(config)
+feinn> 你好
+```
 
-    result = await agent.run("创建一个简单的 Python HTTP 服务器")
-    print(result)
+直接输入你的问题，Agent 会保持对话上下文。
 
-if __name__ == "__main__":
-    asyncio.run(main())
+---
+
+## 配置
+
+### 环境变量 (.env)
+
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `DEFAULT_MODEL` | 默认使用的模型 | `siliconflow/Pro/zai-org/GLM-5.1` |
+| `SILICONFLOW_API_KEY` | SiliconFlow API 密钥 | `sk-...` |
+| `OPENAI_API_KEY` | OpenAI API 密钥 | `sk-...` |
+| `ANTHROPIC_API_KEY` | Anthropic API 密钥 | `sk-ant-...` |
+| `AZURE_OPENAI_API_KEY` | Azure OpenAI 密钥 | `...` |
+| `AZURE_OPENAI_URL` | Azure OpenAI 端点 | `https://...` |
+| `VLLM_BASE_URL` | vLLM 服务地址 | `http://localhost:8000/v1` |
+| `VLLM_API_KEY` | vLLM API 密钥（可选） | `sk-...` |
+| `LOG_LEVEL` | 日志级别 | `INFO` / `DEBUG` |
+| `LOG_FILE` | 日志文件路径 | `~/.feinn/feinn.log` |
+| `PERMISSION_MODE` | 权限模式 | `accept_all` / `auto` / `manual` |
+
+### 权限模式
+
+| 模式 | 说明 |
+|------|------|
+| `accept_all` | 自动接受所有工具调用（默认） |
+| `auto` | 智能判断，破坏性操作需确认 |
+| `manual` | 所有工具调用需人工确认 |
+
+---
+
+## 使用模式
+
+### 模式一：交互式 CLI（推荐）
+
+适合多轮对话、复杂任务：
+
+```bash
+feinn -i
+```
+
+**特点**：
+- 保持对话上下文
+- 支持多轮追问
+- 实时显示工具执行
+- 内置命令快捷操作
+
+**示例会话**：
+```
+feinn> 读取 README.md 文件
+[Tool: Read] 读取中...
+文件内容：...
+
+feinn> 总结一下这个项目是做什么的
+基于刚才的内容，这是一个...
+
+feinn> 帮我创建一个简单的示例
+[Tool: Write] 写入文件 example.py...
+已创建示例文件。
+```
+
+### 模式二：一次性命令
+
+适合简单查询、脚本调用：
+
+```bash
+feinn "你的问题或指令"
+```
+
+**示例**：
+```bash
+feinn "解释 Python 的 asyncio 原理"
+feinn "检查当前目录的代码风格问题"
+feinn "生成一个 Flask 项目的 Dockerfile"
+```
+
+### 模式三：API 服务
+
+适合集成到其他应用：
+
+```bash
+# 启动服务
+feinn --serve --host 0.0.0.0 --port 8000
+
+# 或使用环境变量
+SERVER_HOST=0.0.0.0 SERVER_PORT=8000 feinn --serve
+```
+
+**API 端点**：
+- `POST /chat` - 发送消息
+- `GET /health` - 健康检查
+- `GET /models` - 列出支持的模型
+
+---
+
+## 命令参考
+
+### 全局选项
+
+```bash
+feinn [OPTIONS] [PROMPT]
+
+Options:
+  -i, --interactive    启动交互式 REPL 模式
+  --serve              启动 API 服务
+  --model TEXT         指定模型
+  --accept-all         自动接受所有工具调用
+  --thinking           启用扩展思考模式
+  --host TEXT          服务主机地址
+  --port INTEGER       服务端口
+  --help               显示帮助信息
+```
+
+### 交互模式命令
+
+在 `feinn -i` 交互模式下，可以使用以下命令：
+
+| 命令 | 说明 |
+|------|------|
+| `/quit` 或 `/q` | 退出程序 |
+| `/help` 或 `/h` | 显示帮助 |
+| `/clear` | 清空对话历史 |
+| `/model [model]` | 查看或切换模型 |
+| `/save` | 保存会话到文件 |
+| `/tasks` | 显示任务列表 |
+| `/memory` | 显示记忆列表 |
+| `/config` | 显示当前配置 |
+| `/accept-all` | 切换到自动接受模式 |
+| `/auto` | 切换到智能判断模式 |
+| `/manual` | 切换到手动确认模式 |
+
+### 使用示例
+
+```bash
+# 交互模式
+feinn -i
+
+# 一次性提问
+feinn "如何优化这段代码？"
+
+# 指定模型
+feinn --model openai/gpt-4o "解释量子计算"
+
+# 自动接受所有操作
+feinn -i --accept-all
+
+# 启动 API 服务
+feinn --serve --port 8080
+
+# 使用 vLLM 本地模型
+feinn --model vllm/Qwen2.5-72B-Instruct -i
 ```
 
 ---
 
-## 架构概览
+## 支持模型
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        API Layer                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │   REST API  │  │   SSE       │  │   WebSocket (未来)  │  │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                      Agent Core                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │   Agent     │  │   Context   │  │   Compaction        │  │
-│  │   Engine    │  │   Manager   │  │   Engine            │  │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                   Subsystems                                 │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │  Tools   │ │  Memory  │ │  Tasks   │ │  Subagents     │  │
-│  │  System  │ │  System  │ │  System  │ │  System        │  │
-│  └──────────┘ └──────────┘ └──────────┘ └────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                   Providers & MCP                            │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │  OpenAI  │ │Anthropic │ │  Other   │ │  MCP Servers   │  │
-│  └──────────┘ └──────────┘ └──────────┘ └────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
+### 云服务商
+
+| 提供商 | 模型格式 | 示例 |
+|--------|----------|------|
+| SiliconFlow | `siliconflow/{model}` | `siliconflow/Pro/zai-org/GLM-5.1` |
+| OpenAI | `openai/{model}` | `openai/gpt-4o` |
+| Anthropic | `anthropic/{model}` | `anthropic/claude-sonnet-4` |
+| Azure OpenAI | `azure/{deployment}` | `azure/gpt-4` |
+| Gemini | `gemini/{model}` | `gemini/gemini-2.5-pro` |
+| DeepSeek | `deepseek/{model}` | `deepseek/deepseek-v3` |
+
+### 本地部署
+
+| 方式 | 模型格式 | 配置 |
+|------|----------|------|
+| vLLM | `vllm/{model}` | `VLLM_BASE_URL` |
+| Ollama | `ollama/{model}` | `OLLAMA_BASE_URL` |
+| LM Studio | `lmstudio/{model}` | 自动检测 |
 
 ---
 
-## 核心模块
+## 架构特性
 
-### 1. Agent 引擎
+### 核心特性
 
-Agent 是核心执行单元，负责：
-- 管理对话循环和工具调用
-- 维护上下文状态
-- 协调子系统工作
-- 处理并发请求
+- **多模型支持**: 原生支持 10+ 家 LLM 提供商
+- **企业级并发**: 基于 asyncio 的高性能并发架构
+- **智能上下文压缩**: 自动检测上下文窗口，智能压缩历史消息
+- **任务编排系统**: 内置 DAG 任务管理，支持任务依赖和状态追踪
+- **子代理协作**: 支持并发启动多个子代理，实现复杂任务并行分解
+- **双作用域内存**: Workspace 级与 Agent 级内存隔离
+- **Skill 系统**: 可复用的提示模板，支持触发器和参数替换
+- **权限控制**: 细粒度的工具权限管理
+- **MCP 集成**: 原生支持 Model Context Protocol
 
-```python
-from feinn_agent import Agent, AgentConfig
-
-config = AgentConfig(
-    model="openai/gpt-4o",
-    max_iterations=50,
-    context_window=128000
-)
-
-agent = Agent(config)
-```
-
-### 2. 工具系统
-
-内置 22 个工具，分为九类：
+### 内置工具（20+）
 
 | 类别 | 工具 | 说明 |
 |------|------|------|
-| **文件操作** | Read, Write, Edit | 文件读写编辑 |
-| **搜索** | Glob, Grep | 文件搜索与内容查找 |
-| **执行** | Bash | 命令执行 |
-| **Web** | WebFetch | 网络请求 |
-| **交互** | AskUserQuestion | 用户确认 |
-| **内存管理** | MemorySave, MemorySearch, MemoryList, MemoryDelete | 双作用域知识管理 |
-| **任务管理** | TaskCreate, TaskGet, TaskList, TaskUpdate | DAG 任务编排 |
-| **子代理** | Agent, CheckAgentResult, ListAgentTasks, ListAgentTypes | 并发子代理协作 |
-| **Skill** | Skill, SkillList | 可复用提示模板 |
-
-### 3. 上下文压缩
-
-智能上下文管理系统：
-- 自动检测上下文长度
-- 分层压缩策略（摘要、截断、丢弃）
-- 保留关键消息（系统提示、用户指令）
-- 可配置的压缩阈值
-
-### 4. 任务系统
-
-基于 DAG 的任务编排：
-- 任务依赖管理
-- 优先级调度
-- 状态追踪（pending/running/completed/failed）
-- 并发执行控制
-
-### 5. 子代理系统
-
-支持并发子代理：
-- 动态创建子代理
-- 并行任务分解
-- 结果聚合
-- 资源隔离
-
-### 6. Skill 系统
-
-可复用的提示模板系统：
-- 触发器机制（如 `/commit`）
-- 参数替换（`$ARGUMENTS`, `$PR`）
-- 工具限制（指定可用工具集）
-- 上下文模式（inline/fork）
-
-**使用内置 Skill**:
-```python
-# 使用 Skill 工具调用
-await agent.run("使用 Skill 工具执行 commit")
-
-# 或直接触发
-await agent.run("/commit 修复登录bug")
-```
-
-**创建自定义 Skill**:
-```markdown
----
-name: deploy
-description: Deploy the application
-triggers: ["/deploy"]
-tools: ["Bash", "Read"]
----
-
-Deploy the app to production:
-1. Run tests: `npm test`
-2. Build: `npm run build`
-3. Deploy: `npm run deploy`
-```
-
----
-
-## 企业级特性
-
-### 高并发架构
-
-```python
-# 并发执行多个子代理
-results = await asyncio.gather(
-    agent.run_subagent("分析代码结构", agent_type="analyzer"),
-    agent.run_subagent("检查依赖安全", agent_type="security"),
-    agent.run_subagent("生成测试用例", agent_type="tester")
-)
-```
-
-### 权限控制
-
-三种权限模式：
-- `accept_all`: 自动接受所有工具调用
-- `auto`: 智能判断（破坏性操作需确认）
-- `confirm_all`: 所有操作需人工确认
-
-### 内存隔离
-
-- **Workspace 内存**: 跨会话共享的项目知识
-- **Agent 内存**: 会话级别的临时记忆
-
-### MCP 集成
-
-```python
-# 配置 MCP 服务器
-config.mcp_servers = {
-    "filesystem": {
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"]
-    }
-}
-```
-
----
-
-## 项目结构
-
-```
-feinn-agent/
-├── src/feinn_agent/
-│   ├── __init__.py
-│   ├── agent.py              # 核心 Agent 实现
-│   ├── types.py              # 类型定义
-│   ├── config.py             # 配置管理
-│   ├── providers.py          # LLM 提供商适配
-│   ├── context.py            # 上下文管理
-│   ├── compaction.py         # 上下文压缩
-│   ├── permission.py         # 权限控制
-│   ├── tools/                # 工具系统
-│   │   ├── registry.py       # 工具注册中心
-│   │   ├── builtins.py       # 内置工具
-│   │   └── ...
-│   ├── memory/               # 内存系统
-│   ├── task/                 # 任务系统
-│   ├── subagent/             # 子代理系统
-│   ├── mcp/                  # MCP 集成
-│   ├── server/               # API 服务
-│   └── cli/                  # 命令行工具
-├── tests/                    # 测试套件
-├── docs/                     # 文档
-├── pyproject.toml
-└── README.md
-```
+| 文件操作 | `Read`, `Write`, `Edit` | 文件读写编辑 |
+| 搜索 | `Glob`, `Grep` | 文件搜索与内容查找 |
+| 执行 | `Bash` | 命令执行 |
+| 内存管理 | `MemorySave`, `MemorySearch`, `MemoryList` | 知识管理 |
+| 任务管理 | `TaskCreate`, `TaskGet`, `TaskList` | DAG 任务编排 |
+| 子代理 | `Agent`, `CheckAgentResult` | 并发子代理协作 |
+| Skill | `Skill`, `SkillList` | 可复用提示模板 |
 
 ---
 
@@ -311,44 +322,38 @@ feinn-agent/
 
 ```bash
 # 运行所有测试
-pytest tests/ -v
+python3.11 -m pytest tests/ -v
 
 # 运行特定测试
-pytest tests/test_agent.py -v
-
-# 带覆盖率报告
-pytest tests/ --cov=feinn_agent --cov-report=html
+python3.11 -m pytest tests/test_core.py -v
 ```
 
 ### 代码检查
 
 ```bash
-# 格式化
-ruff format src/
+# 格式化代码
+python3.11 -m ruff format src/
 
-# 检查
-ruff check src/
-
-# 类型检查
-mypy src/feinn_agent/
+# 检查代码
+python3.11 -m ruff check src/
 ```
 
 ### 添加新工具
 
 ```python
-from feinn_agent.tools import register_tool
+from feinn_agent.tools.registry import register
 
-@register_tool(
+@register(
     name="my_tool",
     description="工具描述",
-    parameters={
+    input_schema={
         "type": "object",
         "properties": {
             "param": {"type": "string"}
         }
     }
 )
-async def my_tool(param: str, context: ToolContext) -> str:
+async def my_tool(param: str) -> str:
     """工具实现"""
     return f"结果: {param}"
 ```
@@ -357,35 +362,15 @@ async def my_tool(param: str, context: ToolContext) -> str:
 
 ## 文档
 
-- [需求设计文档](docs/requirements.md) - 功能需求与用例分析
-- [架构设计文档](docs/architecture.md) - 系统架构与模块设计
-- [技术设计文档](docs/technical.md) - 详细技术实现方案
-- [开发路线图](docs/roadmap.md) - 版本规划与里程碑
-
----
-
-## 贡献指南
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
+- [vLLM 部署指南](docs/vllm-deployment.md) - 自托管模型部署
+- [SiliconFlow 配置](docs/siliconflow-setup.md) - 国内 API 平台使用
+- [Azure OpenAI 配置](docs/azure-openai-setup.md) - 企业 Azure 部署
 
 ---
 
 ## 许可证
 
-本项目采用 Apache License 2.0 - 详见 [LICENSE](LICENSE) 文件
-
----
-
-## 致谢
-
-FeinnAgent 的设计参考了以下优秀项目：
-- [CheetahClaws](https://github.com/fishdoll/cheetahclaws) - Python Agent 架构灵感
-- [Claude Code](https://github.com/anthropics/claude-code) - 工具系统与交互设计
-- [Hermes Agent](https://github.com/fishdoll/hermes-agent) - 企业级特性参考
+Apache License 2.0 - 详见 [LICENSE](LICENSE) 文件
 
 ---
 
