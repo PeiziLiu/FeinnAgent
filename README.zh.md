@@ -17,7 +17,7 @@
 </p>
 
 ---
-FeinnAgent 是一个基于 Python 的企业级多并发 AI Agent 框架。它提供开箱即用的多模型接入（支持 OpenAI、Anthropic、SiliconFlow、Azure、Gemini、DeepSeek 等 10+ 家 LLM 提供商）、智能上下文压缩、DAG 任务编排、子代理并发协作以及双作用域内存系统。通过内置的 20+ 工具、Skill 可复用模板和 MCP 协议扩展，FeinnAgent 能够高效处理从简单问答到复杂多步骤任务的各种场景。框架提供交互式 CLI、一次性命令和 RESTful API 三种使用方式，兼顾开发调试便利性与生产环境集成需求。
+FeinnAgent 是一个基于 Python 的企业级多并发 AI Agent 框架，同时面向本地开发与服务端部署场景。它提供开箱即用的多模型接入（支持 OpenAI、Anthropic、SiliconFlow、Azure、Gemini、DeepSeek 等 10+ 家 LLM 提供商）、智能上下文压缩、DAG 任务编排、子代理并发协作以及双作用域内存系统。通过内置的 20+ 工具、Skill 可复用模板和 MCP 协议扩展，FeinnAgent 能够高效处理从简单问答到复杂多步骤任务的各种场景。框架提供交互式 CLI、一次性命令和生产就绪的 RESTful API 服务三种使用方式，既适合开发者本地快速验证，也支持在企业基础设施中进行规模化部署。
 ## 目录
 
 - [安装](#安装)
