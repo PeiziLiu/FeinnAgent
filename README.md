@@ -17,7 +17,7 @@
 </p>
 
 ---
-
+FeinnAgent is an enterprise-grade, multi-concurrency AI Agent framework built with Python. It offers out-of-the-box multi-model integration (supporting 10+ LLM providers including OpenAI, Anthropic, SiliconFlow, Azure, Gemini, DeepSeek, and more), intelligent context compression, DAG task orchestration, concurrent sub-agent collaboration, and a dual-scope memory system. With 20+ built-in tools, reusable Skill templates, and MCP protocol extensions, FeinnAgent efficiently handles a wide range of scenarios from simple Q&A to complex multi-step tasks. The framework provides three usage modes — interactive CLI, one-shot commands, and RESTful API — balancing development convenience with production integration needs
 ## Table of Contents
 
 - [Installation](#installation)
