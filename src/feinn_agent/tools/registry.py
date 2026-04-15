@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 from ..types import ToolDef
+from .output import truncate_output
 
 logger = logging.getLogger(__name__)
 
@@ -82,14 +83,7 @@ async def dispatch(
     limit = max_output or td.max_result_chars
     try:
         result = await td.handler(params, config)
-        if len(result) > limit:
-            half = limit // 2
-            result = (
-                result[:half]
-                + f"\n... [{len(result) - limit} chars truncated] ...\n"
-                + result[-half:]
-            )
-        return result
+        return truncate_output(result, max_chars=limit)
     except Exception as e:
         logger.exception("Tool %s failed", name)
         return f"Error in {name}: {type(e).__name__}: {e}"

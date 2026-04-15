@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import re
 from pathlib import Path
 from typing import Any
 
 from ..types import ToolDef
+from .output import generate_unified_diff, truncate_diff, truncate_output
+from .process import run_command
 from .registry import register
 from .skills import SKILL_LIST_TOOL_DEF, SKILL_TOOL_DEF
 
@@ -90,10 +91,23 @@ async def _write_file(params: dict[str, Any], config: dict[str, Any]) -> str:
         path = Path(file_path).expanduser().resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
+        # Capture old content for diff (if file exists)
+        old_content = ""
+        if path.exists() and path.is_file():
+            old_content = path.read_text(encoding="utf-8", errors="replace")
 
-        return f"Successfully wrote {len(content)} chars to {file_path}"
+        path.write_text(content, encoding="utf-8")
+
+        msg = f"Successfully wrote {len(content)} chars to {file_path}"
+
+        # Append a truncated diff so the LLM can verify the change
+        if old_content:
+            diff = generate_unified_diff(old_content, content, path.name)
+            if diff:
+                diff = truncate_diff(diff)
+                msg += f"\n\n{diff}"
+
+        return msg
 
     except Exception as e:
         return f"Error writing {file_path}: {e}"
@@ -156,7 +170,15 @@ async def _edit_file(params: dict[str, Any], config: dict[str, Any]) -> str:
         path.write_text(new_content, encoding="utf-8")
 
         replaced = count if replace_all else 1
-        return f"Successfully replaced {replaced} occurrence(s) in {file_path}"
+        msg = f"Successfully replaced {replaced} occurrence(s) in {file_path}"
+
+        # Append a truncated diff so the LLM can verify the change
+        diff = generate_unified_diff(content, new_content, path.name)
+        if diff:
+            diff = truncate_diff(diff)
+            msg += f"\n\n{diff}"
+
+        return msg
 
     except Exception as e:
         return f"Error editing {file_path}: {e}"
@@ -190,43 +212,13 @@ register(
 
 
 async def _bash(params: dict[str, Any], config: dict[str, Any]) -> str:
-    """Execute a shell command and return output."""
+    """Execute a shell command with process-group isolation and tree cleanup."""
     command = params.get("command", "")
     timeout = params.get("timeout", 120)
-    cwd = params.get("cwd", os.getcwd())
+    cwd = params.get("cwd")
 
-    if not command:
-        return "Error: command is required"
-
-    try:
-        proc = await asyncio.create_subprocess_shell(
-            command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=cwd,
-        )
-
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except TimeoutError:
-            proc.kill()
-            return f"Error: command timed out after {timeout}s"
-
-        output_parts = []
-        if stdout:
-            output_parts.append(stdout.decode("utf-8", errors="replace"))
-        if stderr:
-            output_parts.append(f"[stderr]\n{stderr.decode('utf-8', errors='replace')}")
-
-        result = "\n".join(output_parts) or f"[exit code: {proc.returncode}]"
-
-        if proc.returncode != 0:
-            result += f"\n[exit code: {proc.returncode}]"
-
-        return result
-
-    except Exception as e:
-        return f"Error executing command: {e}"
+    output, _exit_code = await run_command(command, timeout=timeout, cwd=cwd)
+    return output
 
 
 register(
@@ -405,13 +397,7 @@ async def _web_fetch(params: dict[str, Any], config: dict[str, Any]) -> str:
             resp.raise_for_status()
             content = resp.text
             # Truncate large responses
-            if len(content) > 50_000:
-                content = (
-                    content[:25_000]
-                    + f"\n... [{len(content) - 50_000} chars truncated] ...\n"
-                    + content[-25_000:]
-                )
-            return content
+            return truncate_output(content, max_chars=50_000)
     except ImportError:
         return "Error: httpx package required for WebFetch"
     except Exception as e:

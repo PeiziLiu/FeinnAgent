@@ -15,48 +15,97 @@ logger = logging.getLogger(__name__)
 _SAFE_READ_COMMANDS: list[re.Pattern[str]] = [
     re.compile(p, re.IGNORECASE)
     for p in [
+        # Filesystem inspection
         r"^ls\b",
         r"^cat\b",
         r"^head\b",
         r"^tail\b",
         r"^find\b",
+        r"^tree\b",
+        r"^file\b",
+        r"^stat\b",
+        r"^du\b",
+        r"^df\b",
+        r"^wc\b",
+        # Search
         r"^grep\b",
         r"^rg\b",
-        r"^wc\b",
-        r"^file\b",
-        r"^git status\b",
-        r"^git log\b",
-        r"^git diff\b",
-        r"^git branch\b",
-        r"^git show\b",
+        r"^ag\b",
+        # Git (read-only)
+        r"^git\s+status\b",
+        r"^git\s+log\b",
+        r"^git\s+diff\b",
+        r"^git\s+branch\b",
+        r"^git\s+show\b",
+        r"^git\s+remote\b",
+        r"^git\s+rev-parse\b",
+        r"^git\s+describe\b",
+        r"^git\s+tag\s*$",
+        r"^git\s+tag\s+-l\b",
+        # Shell introspection
         r"^pwd$",
         r"^whoami$",
         r"^echo\b",
+        r"^printf\b",
         r"^which\b",
+        r"^type\b",
+        r"^command\s+-v\b",
         r"^env\b",
-        r"^python --version",
-        r"^node --version",
-        r"^npm list\b",
-        r"^pip list\b",
+        r"^uname\b",
+        r"^hostname$",
+        r"^date\b",
+        r"^uptime$",
+        # Runtime version checks
+        r"^python3?\s+--version",
+        r"^node\s+--version",
+        r"^npm\s+--version",
+        r"^npm\s+list\b",
+        r"^pip3?\s+list\b",
+        r"^pip3?\s+show\b",
+        r"^cargo\s+--version",
+        r"^go\s+version",
+        r"^rustc\s+--version",
+        r"^java\s+--?version",
+        # Tmux (read-only)
+        r"^tmux\s+list-sessions",
+        r"^tmux\s+list-windows",
+        r"^tmux\s+list-panes",
+        r"^tmux\s+capture-pane",
+        r"^tmux\s+show-options",
+        r"^tmux\s+display-message",
+        r"^tmux\s+has-session",
     ]
 ]
 
 _UNSAFE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(p, re.IGNORECASE)
     for p in [
+        # Destructive file operations
         r"\brm\s+-rf\b",
         r"\brm\s+-.*/\b",
+        # Destructive git operations
         r"\bgit\s+push\s+--force\b",
+        r"\bgit\s+push\s+-f\b",
         r"\bgit\s+reset\s+--hard\b",
+        r"\bgit\s+clean\s+-fd\b",
+        # Destructive database operations
         r"\bdrop\s+table\b",
         r"\btruncate\s+table\b",
+        r"\bdelete\s+from\b.*\bwhere\b.*=.*\bor\b",
+        # Destructive disk operations
         r">\s*/dev/sd",
         r"\bdd\s+if=",
         r"\bformat\s+[a-z]:",
+        r"\bmkfs\b",
+        # Privilege escalation
         r"\bsudo\b",
         r"\bchmod\s+777\b",
+        r"\bchown\s+-R\b.*\broot\b",
+        # Remote code execution via pipe
         r"\bcurl\b.*\|\s*(ba)?sh",
         r"\bwget\b.*\|\s*(ba)?sh",
+        # tmux destructive
+        r"\btmux\s+kill-server\b",
     ]
 ]
 
