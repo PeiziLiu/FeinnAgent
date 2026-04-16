@@ -17,7 +17,9 @@
 </p>
 
 ---
+
 FeinnAgent 是一个基于 Python 的企业级多并发 AI Agent 框架，同时面向本地开发与服务端部署场景。它提供开箱即用的多模型接入（支持 OpenAI、Anthropic、SiliconFlow、Azure、Gemini、DeepSeek 等 10+ 家 LLM 提供商）、智能上下文压缩、DAG 任务编排、子代理并发协作以及双作用域内存系统。通过内置的 20+ 工具、Skill 可复用模板和 MCP 协议扩展，FeinnAgent 能够高效处理从简单问答到复杂多步骤任务的各种场景。框架提供交互式 CLI、一次性命令和生产就绪的 RESTful API 服务三种使用方式，既适合开发者本地快速验证，也支持在企业基础设施中进行规模化部署。
+
 ## 目录
 
 - [安装](#安装)
@@ -27,7 +29,10 @@ FeinnAgent 是一个基于 Python 的企业级多并发 AI Agent 框架，同时
 - [命令参考](#命令参考)
 - [支持模型](#支持模型)
 - [架构特性](#架构特性)
+- [项目结构](#项目结构)
+- [Skill 系统](#skill-系统)
 - [开发指南](#开发指南)
+- [文档](#文档)
 
 ---
 
@@ -42,7 +47,7 @@ FeinnAgent 是一个基于 Python 的企业级多并发 AI Agent 框架，同时
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/your-org/feinn-agent.git
+git clone https://github.com/PeiziLiu/FeinnAgent.git
 cd feinn-agent
 
 # 2. 创建虚拟环境
@@ -133,15 +138,16 @@ feinn> 你好
 | `VLLM_API_KEY` | vLLM API 密钥（可选） | `sk-...` |
 | `LOG_LEVEL` | 日志级别 | `INFO` / `DEBUG` |
 | `LOG_FILE` | 日志文件路径 | `~/.feinn/feinn.log` |
-| `PERMISSION_MODE` | 权限模式 | `accept_all` / `auto` / `manual` |
+| `PERMISSION_MODE` | 权限模式 | `accept-all` / `auto` / `manual` / `plan` |
 
 ### 权限模式
 
 | 模式 | 说明 |
 |------|------|
-| `accept_all` | 自动接受所有工具调用（默认） |
+| `accept-all` | 自动接受所有工具调用（默认） |
 | `auto` | 智能判断，破坏性操作需确认 |
 | `manual` | 所有工具调用需人工确认 |
+| `plan` | 只读模式，仅允许计划文件写入 |
 
 ---
 
@@ -314,10 +320,75 @@ feinn --model vllm/Qwen2.5-72B-Instruct -i
 | 文件操作 | `Read`, `Write`, `Edit` | 文件读写编辑 |
 | 搜索 | `Glob`, `Grep` | 文件搜索与内容查找 |
 | 执行 | `Bash` | 命令执行 |
+| Tmux | `TmuxNewSession`, `TmuxSendKeys`, `TmuxCapture` | 持久会话管理 |
+| 诊断 | `GetDiagnostics` | 代码检查与类型检查 |
 | 内存管理 | `MemorySave`, `MemorySearch`, `MemoryList` | 知识管理 |
 | 任务管理 | `TaskCreate`, `TaskGet`, `TaskList` | DAG 任务编排 |
 | 子代理 | `Agent`, `CheckAgentResult` | 并发子代理协作 |
 | Skill | `Skill`, `SkillList` | 可复用提示模板 |
+
+---
+
+## 项目结构
+
+```
+feinn-agent/
+├── src/feinn_agent/          # 主包
+│   ├── __init__.py           # 公共 API 导出
+│   ├── agent.py              # 核心 Agent 循环（异步生成器）
+│   ├── cli.py                # CLI 入口（基于 Click）
+│   ├── config.py             # 配置加载（.env + YAML）
+│   ├── types.py              # 核心类型定义（dataclasses）
+│   ├── providers.py          # LLM Provider 适配器（OpenAI、Anthropic 等）
+│   ├── context.py            # 上下文窗口管理
+│   ├── compaction.py         # 上下文压缩引擎
+│   ├── server.py             # FastAPI REST API 服务
+│   ├── tools/                # 工具系统
+│   │   ├── registry.py       # 工具注册与调度
+│   │   ├── builtins.py       # 内置工具（Read/Write/Edit/Bash/Glob/Grep）
+│   │   ├── process.py        # 进程树管理
+│   │   ├── tmux.py           # Tmux 持久会话工具
+│   │   ├── diagnostics.py    # 代码诊断（pyright/eslint/shellcheck）
+│   │   ├── output.py         # 输出处理（截断/ANSI 清理）
+│   │   └── skills.py         # Skill 工具封装
+│   ├── memory/               # 双作用域内存系统
+│   │   └── store.py          # 内存存储与检索
+│   ├── task/                 # DAG 任务编排
+│   │   └── store.py          # 任务状态机与依赖管理
+│   ├── skill/                # Skill 模板系统
+│   │   ├── loader.py         # Skill 文件发现与解析
+│   │   ├── executor.py       # Skill 执行引擎
+│   │   └── builtin.py        # 内置 Skill 定义
+│   ├── subagent/             # 并发子代理系统
+│   │   └── manager.py        # 子代理生命周期管理
+│   ├── permission/           # 权限控制
+│   │   └── __init__.py       # 权限检查（4 种模式）
+│   ├── mcp/                  # MCP 协议集成
+│   │   └── client.py         # MCP 客户端（stdio/sse 传输）
+│   └── plugin/               # 插件系统
+│       └── __init__.py       # 插件加载接口
+├── tests/                    # 测试套件
+│   ├── test_agent.py         # Agent 循环测试
+│   ├── test_compaction.py    # 上下文压缩测试
+│   ├── test_config.py        # 配置测试
+│   ├── test_core.py          # 核心集成测试
+│   ├── test_execution_engine.py  # 执行引擎测试
+│   ├── test_memory.py        # 内存系统测试
+│   ├── test_providers.py     # Provider 适配器测试
+│   ├── test_skill.py         # Skill 系统测试
+│   └── test_tools.py         # 工具系统测试
+├── docs/                     # 文档
+│   ├── requirements.md       # 需求设计文档
+│   ├── architecture.md       # 架构设计文档
+│   ├── technical.md          # 技术设计文档
+│   ├── roadmap.md            # 开发路线图
+│   └── execution-engine-*.md # 执行引擎升级文档
+├── .feinn/skills/            # 项目级自定义 Skill
+├── pyproject.toml            # 项目元数据与依赖
+├── DEVELOPMENT_WORKFLOW.md   # 开发流程与规范
+├── wiki.md / wiki.zh.md      # Wiki 文档（英文/中文）
+└── README.md / README.zh.md  # README（英文/中文）
+```
 
 ---
 
@@ -438,9 +509,29 @@ async def my_tool(param: str) -> str:
 
 ## 文档
 
+### 设计文档
+
+- [需求设计](docs/requirements.md) - 功能与非功能需求
+- [架构设计](docs/architecture.md) - 系统架构、分层设计、数据流
+- [技术设计](docs/technical.md) - 模块实现细节与 API 设计
+- [开发路线图](docs/roadmap.md) - 版本规划与里程碑
+
+### 执行引擎升级
+
+- [执行引擎需求](docs/execution-engine-requirements.md) - 基于 Harness Engineering 的升级需求
+- [执行引擎技术设计](docs/execution-engine-technical.md) - 详细实现设计
+
+### 部署指南
+
 - [vLLM 部署指南](docs/vllm-deployment.md) - 自托管模型部署
+- [vLLM + Qwen3.5 示例](docs/vllm-qwen35-demo.md) - Qwen3.5 部署示例
 - [SiliconFlow 配置](docs/siliconflow-setup.md) - 国内 API 平台使用
 - [Azure OpenAI 配置](docs/azure-openai-setup.md) - 企业 Azure 部署
+
+### 开发
+
+- [开发流程与规范](DEVELOPMENT_WORKFLOW.md) - Git 工作流、编码规范、发布流程
+- [Wiki](wiki.md) / [Wiki（中文）](wiki.zh.md) - 通用参考文档
 
 ---
 
