@@ -45,9 +45,4 @@ runs/
 
 # 配置与密钥
 .env
-.env.*
-!.env.example
-config.yaml
-secret.json
-credentials.json
 
