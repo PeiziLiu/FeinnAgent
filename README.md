@@ -10,7 +10,7 @@
 <p align="center">
   <b>Enterprise-Grade Multi-Concurrency AI Agent Framework</b><br>
   Built with Python, supporting multiple models, multi-concurrency, context compression, task orchestration, and sub-agent collaboration
-:</p>
+</p>
 
 <p align="center">
   <a href="README.zh.md">中文</a> | <strong>English</strong>
@@ -35,7 +35,6 @@ FeinnAgent is an enterprise-grade, multi-concurrency AI Agent framework built wi
 | **MCP Integration** | Native Model Context Protocol support (stdio/sse/http transport) |
 | **Browser Automation** | Multi-provider browser control (local/Cloudflare/Browserbase/Firecrawl) |
 | **Checkpoint System** | Git-based file system snapshots with rollback |
-| **Trajectory Recording** | Execution history with token statistics and analysis |
 | **Display System** | Kawaii-style CLI with progress bars and diff display |
 | **20+ Built-in Tools** | File ops, search, bash, diagnostics, tmux, memory, tasks |
 
@@ -47,8 +46,8 @@ FeinnAgent is an enterprise-grade, multi-concurrency AI Agent framework built wi
 - [Usage Modes](#usage-modes)
 - [Command Reference](#command-reference)
 - [Supported Models](#supported-models)
-- [Architecture Features](#architecture-features)
 - [Project Structure](#project-structure)
+- [Sub-Agent System](#sub-agent-system)
 - [Skill System](#skill-system)
 - [Development Guide](#development-guide)
 - [Documentation](#documentation)
@@ -104,7 +103,7 @@ DEFAULT_MODEL=anthropic/claude-sonnet-4
 
 # Or Azure OpenAI
 AZURE_OPENAI_API_KEY=your-key
-AZURE_OPENAI_URL=https://your-resource.openai.azure.com/...
+AZURE_OPENAI_URL=https://your-resource.openai.azure.com...
 DEFAULT_MODEL=azure/gpt-4
 
 # Or vLLM self-hosted
@@ -260,8 +259,6 @@ Options:
 
 ### Interactive Mode Commands
 
-In `feinn -i` interactive mode, use these commands:
-
 | Command | Description |
 |---------|-------------|
 | `/quit` or `/q` | Exit program |
@@ -280,40 +277,6 @@ In `feinn -i` interactive mode, use these commands:
 | `/checkpoint` | Manage checkpoints |
 | `/interrupt` | Interrupt current execution |
 | `/trajectory` | Show execution trajectory |
-
-### Usage Examples
-
-```bash
-# Interactive mode
-feinn -i
-
-# One-shot query
-feinn "How to optimize this code?"
-
-# Specify model
-feinn --model openai/gpt-4o "Explain quantum computing"
-
-# Auto-accept all operations
-feinn -i --accept-all
-
-# Start API server
-feinn --serve --port 8080
-
-# Use vLLM local model
-feinn --model vllm/Qwen2.5-72B-Instruct -i
-
-# Use with DeepSeek
-feinn --model deepseek/deepseek-chat "Write a Python decorator"
-
-# Interactive commands
-feinn> /help          # Show help
-feinn> /skills        # List available skills
-feinn> /tasks         # Show task list
-feinn> /memory        # Show memory list
-feinn> /model [name]  # Switch model
-feinn> /clear         # Clear conversation
-feinn> /quit          # Exit
-```
 
 ---
 
@@ -340,75 +303,26 @@ feinn> /quit          # Exit
 
 ---
 
-## Architecture Features
-
-### Core Features
-
-- **Multi-Model Support**: Native support for 10+ LLM providers
-- **Enterprise-Grade Concurrency**: High-performance async architecture based on asyncio
-- **Intelligent Context Compression**: Auto-detect context window, intelligently compress history
-- **Task Orchestration System**: Built-in DAG task management with dependency tracking
-- **Sub-Agent Collaboration**: Support concurrent sub-agent spawning for complex parallel task decomposition
-- **Dual-Scope Memory**: Workspace-level and Agent-level memory isolation
-- **Skill System**: Reusable prompt templates with activators and parameter substitution
-- **Permission Control**: Fine-grained tool permission management
-- **MCP Integration**: Native Model Context Protocol support
-
-### New Features (v0.1.0+)
-
-- **Browser Automation**: Headless browser control with multiple providers
-  - `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`
-  - Providers: Local (agent-browser), Browserbase, Browser Use, Firecrawl
-- **Checkpoint System**: Git-based file system snapshots
-  - `CheckpointManager.create_checkpoint()`, `restore_checkpoint()`
-  - Stored in `~/.feinn/checkpoints/`
-- **.trajectory Recording**: Execution history with analysis
-  - `TrajectoryRecorder` with turn/tool call/token statistics
-  - `TrajectoryAnalyzer.analyze_efficiency()`
-- **Display Enhancements**: Kawaii-style UI
-  - `KawaiiDisplay.show_todo_list()`, `show_progress_detailed()`
-  - `DiffDisplay.format_unified_diff()`
-
-### Built-in Tools (20+)
-
-| Category | Tools | Description | File |
-|----------|-------|-------------|------|
-| File Operations | `Read`, `Write`, `Edit` | File read/write/edit with unified diff | `tools/builtins.py` |
-| Search | `Glob`, `Grep` | File pattern matching and regex search | `tools/builtins.py` |
-| Execution | `Bash` | Shell command with process isolation | `tools/builtins.py`, `tools/process.py` |
-| Web | `WebFetch` | HTTP content fetching | `tools/builtins.py` |
-| User Interaction | `AskUserQuestion` | Clarifying questions | `tools/builtins.py` |
-| Tmux | `TmuxNewSession`, `TmuxSendKeys`, `TmuxCapture` | Persistent session management | `tools/tmux.py` |
-| Diagnostics | `GetDiagnostics` | Code linting (pyright/eslint/shellcheck) | `tools/diagnostics.py` |
-| Memory | `MemorySave`, `MemorySearch`, `MemoryList`, `MemoryDelete` | Knowledge management | `memory/store.py` |
-| Task Management | `TaskCreate`, `TaskGet`, `TaskList`, `TaskUpdate` | DAG task orchestration | `task/store.py` |
-| Sub-Agent | `Agent`, `CheckAgentResult`, `ListAgentTasks`, `ListAgentTypes` | Concurrent sub-agent collaboration | `subagent/manager.py` |
-| Skill | `Skill`, `SkillList` | Reusable prompt templates | `skill/executor.py` |
-
----
-
 ## Project Structure
 
 ```
 feinn-agent/
 ├── src/feinn_agent/          # Main package
-│   ├── __init__.py           # Public API exports
 │   ├── agent.py              # Core agent loop (async generator)
 │   ├── cli.py                # CLI entry point (Click-based)
 │   ├── config.py             # Configuration loading (.env + JSON)
-│   ├── types.py              # Core type definitions (dataclasses)
+│   ├── types.py              # Core type definitions
 │   ├── providers.py          # LLM provider adapters (10+ providers)
 │   ├── context.py            # Context window management
 │   ├── compaction.py         # Context compression engine
 │   ├── server.py             # FastAPI REST API server
 │   ├── tools/                # Tool system
-│   │   ├── __init__.py
 │   │   ├── registry.py       # Tool registration and dispatch
 │   │   ├── builtins.py       # Built-in tools (Read/Write/Edit/Bash/Glob/Grep)
 │   │   ├── process.py        # Process tree management
 │   │   ├── tmux.py           # Tmux persistent session tools
 │   │   ├── diagnostics.py    # Code diagnostics (pyright/eslint/shellcheck)
-│   │   ├── output.py         # Output processing (truncation/ANSI cleanup)
+│   │   ├── output.py         # Output processing
 │   │   └── skills.py         # Skill tool wrappers
 │   ├── memory/               # Dual-scope memory system
 │   │   └── store.py          # Memory storage with YAML frontmatter
@@ -420,93 +334,18 @@ feinn-agent/
 │   │   └── builtin.py        # Built-in skill definitions
 │   ├── subagent/             # Concurrent sub-agent system
 │   │   └── manager.py        # Sub-agent lifecycle management
-│   ├── permission/           # Permission control
-│   │   └── __init__.py       # Permission checking (4 modes)
-│   ├── mcp/                  # MCP protocol integration
-│   │   └── client.py         # MCP client (stdio/sse/http transport)
+│   ├── permission/           # Permission control (4 modes)
+│   │   └── __init__.py
+│   ├── mcp/                  # MCP protocol integration (stdio/sse/http)
+│   │   └── client.py
 │   └── plugin/               # Plugin system
-│       └── __init__.py       # Plugin loading interface
+│       └── __init__.py
 ├── tests/                    # Test suite
-│   ├── test_agent.py         # Agent loop tests
-│   ├── test_compaction.py    # Context compression tests
-│   ├── test_config.py        # Configuration tests
-│   ├── test_core.py          # Core integration tests
-│   ├── test_execution_engine.py  # Execution engine tests
-│   ├── test_memory.py        # Memory system tests
-│   ├── test_providers.py     # Provider adapter tests
-│   ├── test_skill.py         # Skill system tests
-│   └── test_tools.py         # Tool system tests
 ├── docs/                     # Documentation
-│   ├── requirements.md       # Requirements design document
-│   ├── architecture.md       # Architecture design document
-│   ├── technical.md          # Technical design document
-│   ├── roadmap.md            # Development roadmap
-│   ├── execution-engine-requirements.md
-│   ├── execution-engine-technical.md
-│   └── *.md                  # Deployment guides
-├── .feinn/                   # Project-level config
-│   └── skills/               # Project-level custom skills
-├── pyproject.toml            # Project metadata and dependencies
-├── DEVELOPMENT_WORKFLOW.md   # Development workflow and standards
-├── wiki.md / wiki.zh.md      # Wiki documentation (EN/ZH)
-└── README.md / README.zh.md  # README (EN/ZH)
-```
-feinn-agent/
-├── src/feinn_agent/          # Main package
-│   ├── __init__.py           # Public API exports
-│   ├── agent.py              # Core agent loop (async generator)
-│   ├── cli.py                # CLI entry point (Click-based)
-│   ├── config.py             # Configuration loading (.env + YAML)
-│   ├── types.py              # Core type definitions (dataclasses)
-│   ├── providers.py          # LLM provider adapters (OpenAI, Anthropic, etc.)
-│   ├── context.py            # Context window management
-│   ├── compaction.py         # Context compression engine
-│   ├── server.py             # FastAPI REST API server
-│   ├── tools/                # Tool system
-│   │   ├── registry.py       # Tool registration and dispatch
-│   │   ├── builtins.py       # Built-in tools (Read/Write/Edit/Bash/Glob/Grep)
-│   │   ├── process.py        # Process tree management
-│   │   ├── tmux.py           # Tmux persistent session tools
-│   │   ├── diagnostics.py    # Code diagnostics (pyright/eslint/shellcheck)
-│   │   ├── output.py         # Output processing (truncation/ANSI cleanup)
-│   │   └── skills.py         # Skill tool wrappers
-│   ├── memory/               # Dual-scope memory system
-│   │   └── store.py          # Memory storage and retrieval
-│   ├── task/                 # DAG task orchestration
-│   │   └── store.py          # Task state machine and dependency management
-│   ├── skill/                # Skill template system
-│   │   ├── loader.py         # Skill file discovery and parsing
-│   │   ├── executor.py       # Skill execution engine
-│   │   └── builtin.py        # Built-in skill definitions
-│   ├── subagent/             # Concurrent sub-agent system
-│   │   └── manager.py        # Sub-agent lifecycle management
-│   ├── permission/           # Permission control
-│   │   └── __init__.py       # Permission checking (4 modes)
-│   ├── mcp/                  # MCP protocol integration
-│   │   └── client.py         # MCP client (stdio/sse transport)
-│   └── plugin/               # Plugin system
-│       └── __init__.py       # Plugin loading interface
-├── tests/                    # Test suite
-│   ├── test_agent.py         # Agent loop tests
-│   ├── test_compaction.py    # Context compression tests
-│   ├── test_config.py        # Configuration tests
-│   ├── test_core.py          # Core integration tests
-│   ├── test_execution_engine.py  # Execution engine tests
-│   ├── test_memory.py        # Memory system tests
-│   ├── test_providers.py     # Provider adapter tests
-│   ├── test_skill.py         # Skill system tests
-│   └── test_tools.py         # Tool system tests
-├── docs/                     # Documentation
-│   ├── requirements.md       # Requirements design document
-│   ├── architecture.md       # Architecture design document
-│   ├── technical.md          # Technical design document
-│   ├── roadmap.md            # Development roadmap
-│   └── execution-engine-*.md # Execution engine upgrade docs
 ├── .feinn/skills/            # Project-level custom skills
 ├── pyproject.toml            # Project metadata and dependencies
-├── DEVELOPMENT_WORKFLOW.md   # Development workflow and standards
-├── wiki.md / wiki.zh.md      # Wiki documentation (EN/ZH)
 └── README.md / README.zh.md  # README (EN/ZH)
+```
 
 ---
 
@@ -528,14 +367,6 @@ FeinnAgent supports spawning concurrent sub-agents for parallel task decompositi
 - Tool restrictions per agent type
 - Model override support
 - Wait/polling modes for result collection
-
-```python
-# Example: Spawn a reviewer sub-agent
-[Tool: Agent] Spawning sub-agent: type=reviewer
-[Tool: Agent] Sub-agent (reviewer) result:
-## Summary
-Code review complete...
-```
 
 ---
 
@@ -566,9 +397,6 @@ feinn> /explain src/feinn_agent/agent.py
 
 feinn> /test src/feinn_agent/tools.py
 [Agent will generate tests for this module]
-
-feinn> /review
-[Agent will review current branch changes]
 ```
 
 ### Custom Skills
@@ -618,9 +446,6 @@ Context: $PARAMS
 # Run all tests
 python3.11 -m pytest tests/ -v
 
-# Run specific tests
-python3.11 -m pytest tests/test_core.py -v
-
 # Run with coverage
 python3.11 -m pytest tests/ --cov=src/feinn_agent --cov-report=term-missing
 
@@ -634,51 +459,8 @@ python3.11 -m pytest tests/ -m "not integration"
 # Format code
 python3.11 -m ruff format src/
 
-# Check code
-python3.11 -m ruff check src/
-
-# Fix auto-fixable issues
+# Check and fix
 python3.11 -m ruff check src/ --fix
-```
-
-### Project Structure
-
-```
-src/feinn_agent/
-├── __init__.py           # Public API exports
-├── agent.py              # Core agent loop (async generator)
-├── cli.py                # CLI entry point
-├── config.py             # Configuration loading
-├── context.py            # Context management
-├── compaction.py         # Context compression
-├── providers.py          # LLM provider adapters
-├── server.py             # FastAPI REST API server
-├── types.py              # Core type definitions
-├── tools/
-│   ├── __init__.py
-│   ├── registry.py       # Tool registration
-│   ├── builtins.py       # Built-in tools
-│   ├── process.py        # Process tree
-│   ├── tmux.py           # Tmux integration
-│   ├── diagnostics.py     # Code diagnostics
-│   ├── output.py         # Output processing
-│   └── skills.py         # Skill tools
-├── memory/
-│   └── store.py          # Dual-scope memory
-├── task/
-│   └── store.py          # DAG task system
-├── skill/
-│   ├── loader.py         # Skill loading
-│   ├── executor.py       # Skill execution
-│   └── builtin.py        # Built-in skills
-├── subagent/
-│   └── manager.py        # Sub-agent system
-├── permission/
-│   └── __init__.py       # Permission control
-├── mcp/
-│   └── client.py         # MCP client
-└── plugin/
-    └── __init__.py       # Plugin system
 ```
 
 ### Adding New Tools
@@ -703,7 +485,7 @@ register(
             "required": ["param"]
         },
         handler=my_tool,
-        read_only=True,  # or False for destructive
+        read_only=True,
     )
 )
 ```
@@ -712,27 +494,16 @@ register(
 
 ## Documentation
 
-### Design Documents
-
 - [Requirements Design](docs/requirements.md) - Functional and non-functional requirements
 - [Architecture Design](docs/architecture.md) - System architecture, layered design, data flow
 - [Technical Design](docs/technical.md) - Detailed module implementation and API design
 - [Development Roadmap](docs/roadmap.md) - Version planning and milestones
-
-### Execution Engine Upgrade
-
 - [Execution Engine Requirements](docs/execution-engine-requirements.md) - Harness Engineering-based upgrade requirements
 - [Execution Engine Technical Design](docs/execution-engine-technical.md) - Detailed implementation design
-
-### Deployment Guides
-
 - [vLLM Deployment Guide](docs/vllm-deployment.md) - Self-hosted model deployment
 - [vLLM + Qwen3.5 Demo](docs/vllm-qwen35-demo.md) - Qwen3.5 deployment example
 - [SiliconFlow Setup](docs/siliconflow-setup.md) - China API platform usage
 - [Azure OpenAI Setup](docs/azure-openai-setup.md) - Enterprise Azure deployment
-
-### Development
-
 - [Contributing Guide](CONTRIBUTING.md) - Contribution guidelines, code standards, and PR process
 - [Development Workflow](DEVELOPMENT_WORKFLOW.md) - Git workflow, coding standards, and release process
 - [Wiki](wiki.md) / [Wiki (Chinese)](wiki.zh.md) - General reference documentation
