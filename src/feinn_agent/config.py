@@ -109,11 +109,15 @@ def get_api_key(provider: str, config: dict[str, Any]) -> str:
     return os.environ.get(env_var, "") if env_var else ""
 
 
-def setup_logging(config: dict[str, Any]) -> None:
+def setup_logging(config: dict[str, Any], quiet: bool = False) -> None:
     """Setup logging with optional file output and daily rotation.
 
     Log files are rotated daily at midnight. Old logs are kept in the same
     directory with date suffix (e.g., feinn-2026-04-12.log).
+    
+    Args:
+        config: Configuration dictionary
+        quiet: If True, suppress stderr output (useful for interactive mode)
     """
     import logging
     import logging.handlers
@@ -122,7 +126,11 @@ def setup_logging(config: dict[str, Any]) -> None:
     log_level = config.get("log_level", "INFO")
     log_file = config.get("log_file")
 
-    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
+    handlers: list[logging.Handler] = []
+    
+    # Only add stderr handler if not in quiet mode
+    if not quiet:
+        handlers.append(logging.StreamHandler(sys.stderr))
 
     if log_file:
         log_path = Path(log_file).expanduser()

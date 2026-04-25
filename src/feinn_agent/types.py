@@ -8,8 +8,12 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator, Callable, Coroutine
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 from typing import Any
+
+# Backport StrEnum for Python < 3.11
+class StrEnum(str, Enum):
+    pass
 
 # ── Unique identifiers ──────────────────────────────────────────────
 
@@ -145,16 +149,18 @@ class AgentDone:
 
 
 # Union type for all stream events
-AgentEvent = (
-    TextChunk
-    | ThinkingChunk
-    | ToolStart
-    | ToolEnd
-    | PermissionRequest
-    | TurnDone
-    | AgentDone
-    | AssistantTurn
-)
+from typing import Union
+
+AgentEvent = Union[
+    TextChunk,
+    ThinkingChunk,
+    ToolStart,
+    ToolEnd,
+    PermissionRequest,
+    TurnDone,
+    AgentDone,
+    AssistantTurn
+]
 
 # Async generator type for the agent loop
 AgentStream = AsyncIterator[AgentEvent]

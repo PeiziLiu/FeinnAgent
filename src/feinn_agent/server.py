@@ -15,7 +15,7 @@ import logging
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Optional, List, Dict
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,9 +46,9 @@ class ChatRequest(BaseModel):
     """Request body for /chat endpoint."""
 
     message: str
-    session_id: str | None = None
-    model: str | None = None
-    images: list[dict[str, str]] | None = None
+    session_id: Optional[str] = None
+    model: Optional[str] = None
+    images: Optional[List[Dict[str, str]]] = None
     stream: bool = True
 
 
@@ -80,7 +80,7 @@ _sessions: dict[str, tuple[FeinnAgent, dict[str, Any]]] = {}
 
 
 def _get_or_create_session(
-    session_id: str | None, config: dict[str, Any]
+    session_id: Optional[str], config: dict[str, Any]
 ) -> tuple[str, FeinnAgent, dict[str, Any]]:
     """Get existing session or create new one. Returns (session_id, agent, config)."""
     if session_id and session_id in _sessions:
@@ -227,7 +227,7 @@ def create_app(config: dict[str, Any] | None = None) -> FastAPI:
 async def _stream_response(
     agent: FeinnAgent,
     message: str,
-    images: list[dict[str, str]] | None,
+    images: Optional[List[Dict[str, str]]],
     session_id: str,
 ) -> AsyncIterator[bytes]:
     """Yield SSE-formatted events from the agent loop."""

@@ -14,8 +14,15 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 from typing import Any
+
+# Backport StrEnum for Python 3.9 compatibility
+try:
+    from enum import StrEnum
+except ImportError:
+    class StrEnum(str, Enum):
+        pass
 
 from ..tools.registry import register
 from ..types import ToolDef

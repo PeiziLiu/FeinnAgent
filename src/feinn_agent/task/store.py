@@ -10,9 +10,16 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from enum import StrEnum
+from enum import Enum
 from pathlib import Path
 from typing import Any
+
+# Backport StrEnum for Python 3.9 compatibility
+try:
+    from enum import StrEnum
+except ImportError:
+    class StrEnum(str, Enum):
+        pass
 
 from ..tools.registry import register
 from ..types import ToolDef
