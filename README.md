@@ -33,6 +33,10 @@ FeinnAgent is an enterprise-grade, multi-concurrency AI Agent framework built wi
 | **Skill Templates** | Reusable prompt templates with activators and parameter substitution |
 | **Permission Control** | Four modes: accept-all, auto, manual, plan |
 | **MCP Integration** | Native Model Context Protocol support (stdio/sse/http transport) |
+| **Browser Automation** | Multi-provider browser control (local/Cloudflare/Browserbase/Firecrawl) |
+| **Checkpoint System** | Git-based file system snapshots with rollback |
+| **Trajectory Recording** | Execution history with token statistics and analysis |
+| **Display System** | Kawaii-style CLI with progress bars and diff display |
 | **20+ Built-in Tools** | File ops, search, bash, diagnostics, tmux, memory, tasks |
 
 ## Table of Contents
@@ -272,6 +276,10 @@ In `feinn -i` interactive mode, use these commands:
 | `/accept-all` | Switch to auto-accept mode |
 | `/auto` | Switch to smart judgment mode |
 | `/manual` | Switch to manual confirmation mode |
+| `/plan` | Show execution plan |
+| `/checkpoint` | Manage checkpoints |
+| `/interrupt` | Interrupt current execution |
+| `/trajectory` | Show execution trajectory |
 
 ### Usage Examples
 
@@ -345,6 +353,21 @@ feinn> /quit          # Exit
 - **Skill System**: Reusable prompt templates with activators and parameter substitution
 - **Permission Control**: Fine-grained tool permission management
 - **MCP Integration**: Native Model Context Protocol support
+
+### New Features (v0.1.0+)
+
+- **Browser Automation**: Headless browser control with multiple providers
+  - `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`
+  - Providers: Local (agent-browser), Browserbase, Browser Use, Firecrawl
+- **Checkpoint System**: Git-based file system snapshots
+  - `CheckpointManager.create_checkpoint()`, `restore_checkpoint()`
+  - Stored in `~/.feinn/checkpoints/`
+- **.trajectory Recording**: Execution history with analysis
+  - `TrajectoryRecorder` with turn/tool call/token statistics
+  - `TrajectoryAnalyzer.analyze_efficiency()`
+- **Display Enhancements**: Kawaii-style UI
+  - `KawaiiDisplay.show_todo_list()`, `show_progress_detailed()`
+  - `DiffDisplay.format_unified_diff()`
 
 ### Built-in Tools (20+)
 
@@ -484,7 +507,6 @@ feinn-agent/
 ├── DEVELOPMENT_WORKFLOW.md   # Development workflow and standards
 ├── wiki.md / wiki.zh.md      # Wiki documentation (EN/ZH)
 └── README.md / README.zh.md  # README (EN/ZH)
-```
 
 ---
 

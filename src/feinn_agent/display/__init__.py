@@ -10,13 +10,15 @@ import sys
 from dataclasses import dataclass
 from typing import Optional
 
+
 # ANSI color codes
 class Colors:
     """ANSI color codes for terminal output."""
+
     RESET = "\033[0m"
     BOLD = "\033[1m"
     DIM = "\033[2m"
-    
+
     # Foreground colors
     BLACK = "\033[30m"
     RED = "\033[31m"
@@ -26,7 +28,7 @@ class Colors:
     MAGENTA = "\033[35m"
     CYAN = "\033[36m"
     WHITE = "\033[37m"
-    
+
     # Bright colors
     BRIGHT_BLACK = "\033[90m"
     BRIGHT_RED = "\033[91m"
@@ -36,7 +38,7 @@ class Colors:
     BRIGHT_MAGENTA = "\033[95m"
     BRIGHT_CYAN = "\033[96m"
     BRIGHT_WHITE = "\033[97m"
-    
+
     # Background colors
     BG_BLACK = "\033[40m"
     BG_RED = "\033[41m"
@@ -50,7 +52,7 @@ class Colors:
 
 class KawaiiDisplay:
     """Kawaii-style display for FeinnAgent."""
-    
+
     STATUS_EMOJI = {
         "thinking": "🤔",
         "executing": "⚡",
@@ -72,35 +74,35 @@ class KawaiiDisplay:
         "star": "⭐",
         "heart": "❤️",
     }
-    
+
     def __init__(self, use_color: bool = True):
         self.use_color = use_color
-    
+
     def _color(self, text: str, color: str) -> str:
         """Apply color to text."""
         if not self.use_color:
             return text
         return f"{color}{text}{Colors.RESET}"
-    
+
     def _bold(self, text: str) -> str:
         """Make text bold."""
         if not self.use_color:
             return text
         return f"{Colors.BOLD}{text}{Colors.RESET}"
-    
+
     def show_status(self, status: str, message: str) -> str:
         """Show a status message with emoji.
-        
+
         Args:
             status: Status type (from STATUS_EMOJI keys)
             message: Message to display
-            
+
         Returns:
             Formatted string
         """
         emoji = self.STATUS_EMOJI.get(status, "❓")
         return f"{emoji} {message}"
-    
+
     def show_progress(
         self,
         current: int,
@@ -109,13 +111,13 @@ class KawaiiDisplay:
         width: int = 30,
     ) -> str:
         """Show a progress bar.
-        
+
         Args:
             current: Current progress value
             total: Total value
             message: Optional message to show
             width: Width of progress bar in characters
-            
+
         Returns:
             Formatted progress bar string
         """
@@ -123,39 +125,39 @@ class KawaiiDisplay:
             percentage = 100
         else:
             percentage = min(int(current / total * 100), 100)
-        
+
         filled = int(width * percentage / 100)
         bar = "█" * filled + "░" * (width - filled)
-        
+
         emoji = "⚡" if percentage < 100 else "🎉"
         msg_part = f" {message}" if message else ""
-        
+
         return f"{emoji} [{bar}] {percentage}%{msg_part}"
-    
+
     def show_tool_start(
         self,
         tool_name: str,
         arguments: Optional[dict] = None,
     ) -> str:
         """Show tool execution start.
-        
+
         Args:
             tool_name: Name of the tool
             arguments: Tool arguments
-            
+
         Returns:
             Formatted string
         """
         emoji = self.STATUS_EMOJI.get("executing", "⚡")
         output = [f"{emoji} {self._bold(tool_name)}("]
-        
+
         if arguments:
             args_str = self._format_arguments(arguments)
             output.append(f"  {args_str}")
-        
+
         output.append(")")
         return "\n".join(output)
-    
+
     def show_tool_end(
         self,
         tool_name: str,
@@ -163,12 +165,12 @@ class KawaiiDisplay:
         error: Optional[str] = None,
     ) -> str:
         """Show tool execution end.
-        
+
         Args:
             tool_name: Name of the tool
             success: Whether execution was successful
             error: Optional error message
-            
+
         Returns:
             Formatted string
         """
@@ -178,37 +180,37 @@ class KawaiiDisplay:
         else:
             emoji = self.STATUS_EMOJI.get("error", "😢")
             status = self._color("✗", Colors.RED)
-        
+
         output = [f"{emoji} {self._bold(tool_name)} {status}"]
-        
+
         if error:
             output.append(f"  {self._color(error, Colors.RED)}")
-        
+
         return "\n".join(output)
-    
+
     def _format_arguments(self, arguments: dict, max_length: int = 60) -> str:
         """Format tool arguments for display.
-        
+
         Args:
             arguments: Arguments dictionary
             max_length: Maximum line length
-            
+
         Returns:
             Formatted arguments string
         """
         lines = []
         for key, value in arguments.items():
             if isinstance(value, str) and len(value) > max_length:
-                value = value[:max_length - 3] + "..."
+                value = value[: max_length - 3] + "..."
             elif isinstance(value, dict):
                 value = json.dumps(value)[:max_length] + "..."
             elif isinstance(value, list):
                 value = str(value)[:max_length] + "..."
-            
+
             lines.append(f"{key}={repr(value)}")
-        
+
         return ", ".join(lines)
-    
+
     def show_plan_step(
         self,
         step_number: int,
@@ -217,13 +219,13 @@ class KawaiiDisplay:
         index: Optional[int] = None,
     ) -> str:
         """Show a plan step.
-        
+
         Args:
             step_number: Step number
             description: Step description
             status: Step status ('pending', 'in_progress', 'completed', 'skipped', 'failed')
             index: Optional index for ordering
-            
+
         Returns:
             Formatted string
         """
@@ -234,19 +236,19 @@ class KawaiiDisplay:
             "skipped": "◌",
             "failed": "✗",
         }
-        
+
         icon = status_icons.get(status, "○")
-        
+
         if status == "completed":
             icon = self._color(icon, Colors.GREEN)
         elif status == "failed":
             icon = self._color(icon, Colors.RED)
         elif status == "in_progress":
             icon = self._color(icon, Colors.YELLOW)
-        
+
         index_str = f"[{index}] " if index is not None else ""
         return f"  {icon} {index_str}{description}"
-    
+
     def show_checkpoint(
         self,
         checkpoint_id: str,
@@ -254,24 +256,24 @@ class KawaiiDisplay:
         file_count: int = 0,
     ) -> str:
         """Show checkpoint information.
-        
+
         Args:
             checkpoint_id: Checkpoint ID
             message: Checkpoint message
             file_count: Number of files in checkpoint
-            
+
         Returns:
             Formatted string
         """
         emoji = self.STATUS_EMOJI.get("checkpoint", "📸")
         return f"{emoji} Checkpoint {checkpoint_id}: {message} ({file_count} files)"
-    
+
     def show_interrupt(self, reason: str = "") -> str:
         """Show interrupt message.
-        
+
         Args:
             reason: Interrupt reason
-            
+
         Returns:
             Formatted string
         """
@@ -280,13 +282,13 @@ class KawaiiDisplay:
         if reason:
             msg += f": {reason}"
         return f"{emoji} {self._color(msg, Colors.RED)}"
-    
+
     def show_welcome(self, model: str) -> str:
         """Show welcome banner.
-        
+
         Args:
             model: Model being used
-            
+
         Returns:
             Formatted welcome string
         """
@@ -301,19 +303,113 @@ class KawaiiDisplay:
         ]
         return "\n".join(lines)
 
+    def show_todo_list(
+        self,
+        items: list[dict],
+        current_index: int = -1,
+        title: str = "📋 任务规划",
+    ) -> str:
+        """Show a todo list with progress."""
+        status_map = {
+            "pending": ("☐", Colors.BRIGHT_BLACK),
+            "in_progress": ("▶", Colors.YELLOW),
+            "completed": ("✅", Colors.GREEN),
+            "skipped": ("⏭", Colors.BRIGHT_BLACK),
+            "failed": ("❌", Colors.RED),
+        }
+        lines = [f"┌─ {title} {'─' * 20}┐"]
+        for i, item in enumerate(items):
+            status = item.get("status", "pending")
+            content = item.get("content", str(item))
+            box, color = status_map.get(status, ("☐", Colors.BRIGHT_BLACK))
+            idx_str = f"[{i + 1}]"
+            current_marker = "▶ " if i == current_index else "  "
+            if i == current_index:
+                lines.append(f"│ {box} {self._bold(idx_str + current_marker + content[:40])}")
+            else:
+                lines.append(f"│ {box} {idx_str} {self._color(content[:40], color)}")
+        lines.append("└" + "─" * 40 + "┘")
+        return "\n".join(lines)
+
+    def show_progress_detailed(
+        self,
+        current: int,
+        total: int,
+        step_name: str = "",
+        width: int = 20,
+    ) -> str:
+        """Show a detailed progress bar."""
+        if total == 0:
+            percentage = 100
+            progress_bar = "█" * width
+        else:
+            percentage = min(int(current / total * 100), 100)
+            filled = int(width * current / total)
+            progress_bar = "█" * filled + "░" * (width - filled)
+        emoji = "🎉" if current == total else ("⏳" if current == 0 else "⚡")
+        status = "完成" if current == total else ("等待开始" if current == 0 else "处理中")
+        box_content = f" [{current}/{total}] {percentage}% [{progress_bar}]"
+        if step_name:
+            box_content += f" {step_name[:20]}"
+        lines = [
+            f"┌─ {emoji} 执行进度 {box_content} {'─' * 10}┐",
+            f"│ {status}: {step_name or '无'}",
+            "└" + "─" * 40 + "┘",
+        ]
+        return "\n".join(lines)
+
+    def show_tool_execution(
+        self,
+        tool_name: str,
+        status: str = "start",
+        args: dict | None = None,
+    ) -> str:
+        """Show tool execution status."""
+        if status == "start":
+            first_arg = ""
+            if args:
+                first_val = next(iter(args.values()), "")
+                if isinstance(first_val, str) and len(first_val) > 30:
+                    first_val = first_val[:30] + "..."
+                first_arg = f" {first_val}"
+            return f"⚡ {self._bold(tool_name)}{first_arg}"
+        elif status == "success":
+            return f"  └─ {self._color('✅', Colors.GREEN)}"
+        return ""
+
+    def show_status_summary(
+        self,
+        turn_count: int,
+        input_tokens: int,
+        output_tokens: int,
+        cost: float = 0.0,
+    ) -> str:
+        """Show execution status summary."""
+        total = input_tokens + output_tokens
+        tokens_str = f"{input_tokens}↓ + {output_tokens}↑ = {total}"
+        if cost > 0:
+            tokens_str += f" (${cost:.4f})"
+        lines = [
+            f"┌─ 📊 执行统计 {'─' * 30}┐",
+            f"│ {self._color('Turns:', Colors.BRIGHT_BLACK)} {turn_count}",
+            f"│ {self._color('Tokens:', Colors.BRIGHT_BLACK)} {tokens_str}",
+            "└" + "─" * 40 + "┘",
+        ]
+        return "\n".join(lines)
+
 
 class DiffDisplay:
     """Display file diffs."""
-    
+
     def __init__(self, use_color: bool = True):
         self.use_color = use_color
-    
+
     def _color(self, text: str, color: str) -> str:
         """Apply color to text."""
         if not self.use_color:
             return text
         return f"{color}{text}{Colors.RESET}"
-    
+
     def format_unified_diff(
         self,
         old_lines: list[str],
@@ -323,14 +419,14 @@ class DiffDisplay:
         context: int = 3,
     ) -> str:
         """Generate unified diff output.
-        
+
         Args:
             old_lines: Original lines
             new_lines: New lines
             from_file: Original file name
             to_file: New file name
             context: Number of context lines
-            
+
         Returns:
             Formatted diff string
         """
@@ -341,7 +437,7 @@ class DiffDisplay:
             tofile=to_file,
             n=context,
         )
-        
+
         lines = []
         for line in diff:
             if line.startswith("+") and not line.startswith("+++"):
@@ -352,9 +448,9 @@ class DiffDisplay:
                 lines.append(self._color(line, Colors.CYAN))
             else:
                 lines.append(line)
-        
+
         return "".join(lines)
-    
+
     def show_file_diff(
         self,
         old_content: str,
@@ -363,26 +459,26 @@ class DiffDisplay:
         max_lines: int = 100,
     ) -> str:
         """Show a file diff.
-        
+
         Args:
             old_content: Original file content
             new_content: New file content
             filename: File name
             max_lines: Maximum lines to show
-            
+
         Returns:
             Formatted diff string
         """
         old_lines = old_content.splitlines()[:max_lines]
         new_lines = new_content.splitlines()[:max_lines]
-        
+
         header = self._color(f"--- {filename}", Colors.RED) + "\n"
         header += self._color(f"+++ {filename}", Colors.GREEN)
-        
+
         diff = self.format_unified_diff(old_lines, new_lines, from_file=filename, to_file=filename)
-        
+
         return header + "\n" + diff
-    
+
     def show_changes_summary(
         self,
         added: int,
@@ -390,12 +486,12 @@ class DiffDisplay:
         deleted: int,
     ) -> str:
         """Show a summary of changes.
-        
+
         Args:
             added: Number of added files
             modified: Number of modified files
             deleted: Number of deleted files
-            
+
         Returns:
             Formatted summary string
         """
@@ -406,33 +502,33 @@ class DiffDisplay:
             parts.append(self._color(f"~{modified}", Colors.YELLOW))
         if deleted > 0:
             parts.append(self._color(f"-{deleted}", Colors.RED))
-        
+
         return f"Changes: {' | '.join(parts)}" if parts else "No changes"
 
 
 class ToolPreview:
     """Generate tool call previews."""
-    
+
     def __init__(self, use_color: bool = True):
         self.use_color = use_color
-    
+
     def _color(self, text: str, color: str) -> str:
         """Apply color to text."""
         if not self.use_color:
             return text
         return f"{color}{text}{Colors.RESET}"
-    
+
     def preview_tool_call(
         self,
         tool_name: str,
         arguments: dict,
     ) -> str:
         """Generate a preview of a tool call.
-        
+
         Args:
             tool_name: Name of the tool
             arguments: Tool arguments
-            
+
         Returns:
             Formatted preview string
         """
@@ -441,28 +537,28 @@ class ToolPreview:
             f"│ {self._color('Name:', Colors.BRIGHT_BLACK)} {tool_name}",
             f"│ {self._color('Args:', Colors.BRIGHT_BLACK)}",
         ]
-        
+
         for key, value in arguments.items():
             value_str = self._format_value(value)
             lines.append(f"│   {self._color(key + ':', Colors.YELLOW)} {value_str}")
-        
+
         lines.append(self._color("└" + "─" * 40, Colors.CYAN))
-        
+
         return "\n".join(lines)
-    
+
     def _format_value(self, value, max_length: int = 50) -> str:
         """Format a value for display.
-        
+
         Args:
             value: Value to format
             max_length: Maximum length
-            
+
         Returns:
             Formatted value string
         """
         if isinstance(value, str):
             if len(value) > max_length:
-                return f'"{value[:max_length-3]}..."'
+                return f'"{value[: max_length - 3]}..."'
             return f'"{value}"'
         elif isinstance(value, dict):
             return json.dumps(value, ensure_ascii=False)[:max_length]

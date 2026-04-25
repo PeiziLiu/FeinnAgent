@@ -20,6 +20,7 @@ from .context import build_system_prompt
 
 if TYPE_CHECKING:
     from .agent import FeinnAgent
+from .display import KawaiiDisplay
 from .mcp import init_mcp, shutdown_mcp
 from .memory import store as _memory_store  # noqa: F401 — register memory tools
 from .subagent import manager as _subagent  # noqa: F401 — register agent tools
@@ -34,6 +35,8 @@ from .types import (
     ToolStart,
     TurnDone,
 )
+
+display = KawaiiDisplay()
 
 
 def _ensure_builtins() -> None:
@@ -89,7 +92,8 @@ async def _run_interactive(config: dict[str, Any]) -> None:
             tool_depth = 0
             thinking_shown = False
             thinking_content = ""
-            
+            tool_name = ""
+
             async for event in agent.run(user_input):
                 if isinstance(event, TextChunk):
                     click.echo(event.text, nl=False)
@@ -99,25 +103,22 @@ async def _run_interactive(config: dict[str, Any]) -> None:
                         thinking_content = event.thinking
                 elif isinstance(event, ToolStart):
                     tool_depth += 1
+                    tool_name = event.name
                     if tool_depth == 1:
-                        click.echo(click.style("\n⚡ ", fg="yellow"), nl=False)
-                        click.echo(click.style(f"[{event.name}]", fg="cyan", bold=True), nl=False)
+                        click.echo()
                         first_val = next(iter(event.inputs.values()), "")
-                        if isinstance(first_val, str) and len(first_val) > 50:
-                            first_val = first_val[:50] + "..."
-                        if first_val:
-                            click.echo(click.style(f" {first_val}", fg="bright_black"), nl=False)
+                        if isinstance(first_val, str) and len(first_val) > 40:
+                            first_val = first_val[:40] + "..."
+                        tool_args = {"args": first_val} if first_val else None
+                        click.echo(display.show_tool_execution(event.name, "start", tool_args))
                 elif isinstance(event, ToolEnd):
                     tool_depth -= 1
                     if tool_depth == 0:
-                        click.echo(click.style(" ✅", fg="green"), nl=False)
+                        click.echo(display.show_tool_execution(tool_name, "success"))
                 elif isinstance(event, TurnDone):
                     pass
                 elif isinstance(event, AgentDone):
                     click.echo()
-                    if thinking_content:
-                        click.echo(click.style(f"💭 {thinking_content[:200]}...", fg="bright_black"))
-                        thinking_content = ""
                     cost = 0.0
                     try:
                         from .providers import estimate_cost
@@ -129,12 +130,16 @@ async def _run_interactive(config: dict[str, Any]) -> None:
                         )
                     except Exception:
                         pass
-                    tokens_str = f"{event.total_input_tokens}in + {event.total_output_tokens}out"
-                    if cost > 0:
-                        tokens_str += f" (${cost:.4f})"
                     click.echo(
-                        click.style(f"📊 {tokens_str} | {event.turn_count} turns", fg="bright_black")
+                        display.show_status_summary(
+                            turn_count=event.turn_count,
+                            input_tokens=event.total_input_tokens,
+                            output_tokens=event.total_output_tokens,
+                            cost=cost,
+                        )
                     )
+                    if thinking_content:
+                        click.echo(display.show_thinking_collapsed(thinking_content))
         except Exception as e:
             click.echo(click.style(f"\n❌ Error: {e}", fg="red"))
 
@@ -279,6 +284,7 @@ def _handle_command(cmd: str, agent: FeinnAgent, config: dict[str, Any]) -> bool
 
     elif command == "/plan":
         from .plan import PlanManager
+
         manager = PlanManager()
         plans = manager.list_plans()
         if not plans:
@@ -286,16 +292,27 @@ def _handle_command(cmd: str, agent: FeinnAgent, config: dict[str, Any]) -> bool
         else:
             click.echo(click.style("\n  Execution Plans:", fg="cyan", bold=True))
             for plan in plans[:10]:
-                status_color = {"draft": "yellow", "approved": "green", "in_progress": "blue", "completed": "green", "aborted": "red"}.get(plan.status.value, "white")
-                click.echo(f"  {click.style('[', fg='white')}{click.style(plan.status.value, fg=status_color)}{click.style(']', fg='white')} {plan.title}")
+                status_color = {
+                    "draft": "yellow",
+                    "approved": "green",
+                    "in_progress": "blue",
+                    "completed": "green",
+                    "aborted": "red",
+                }.get(plan.status.value, "white")
+                status_str = f"{click.style('[', fg='white')}"
+                status_str += f"{click.style(plan.status.value, fg=status_color)}"
+                status_str += f"{click.style(']', fg='white')}"
+                click.echo(f"  {status_str} {plan.title}")
                 click.echo(f"    ID: {plan.id}")
                 click.echo(f"    Steps: {len(plan.steps)} | Created: {plan.created_at.strftime('%Y-%m-%d %H:%M')}")
             if len(plans) > 10:
                 click.echo(f"\n  ... and {len(plans) - 10} more plans")
 
     elif command == "/checkpoint":
-        from .checkpoint import CheckpointManager
         import os
+
+        from .checkpoint import CheckpointManager
+
         manager = CheckpointManager()
         working_dir = os.getcwd()
         checkpoints = manager.list_checkpoints(working_dir)
@@ -310,6 +327,7 @@ def _handle_command(cmd: str, agent: FeinnAgent, config: dict[str, Any]) -> bool
 
     elif command == "/interrupt":
         from .interrupt import set_interrupt
+
         set_interrupt("User requested interrupt")
         click.echo(click.style("🛑 Execution interrupted", fg="red"))
         click.echo("Use '/resume' to continue or start a new task.")
@@ -319,7 +337,8 @@ def _handle_command(cmd: str, agent: FeinnAgent, config: dict[str, Any]) -> bool
         click.echo("Note: Resume functionality requires session state preservation.")
 
     elif command == "/trajectory":
-        from .trajectory import TrajectoryRecorder, TrajectoryAnalyzer
+        from .trajectory import TrajectoryRecorder
+
         trajectories = TrajectoryRecorder.list_trajectories()
         if not trajectories:
             click.echo("No execution trajectories found.")
