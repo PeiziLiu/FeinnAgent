@@ -49,6 +49,8 @@ _ENV_MAP: dict[str, str] = {
     "moonshot_api_key": "MOONSHOT_API_KEY",
     "siliconflow_api_key": "SILICONFLOW_API_KEY",
     "siliconflow_base_url": "SILICONFLOW_BASE_URL",
+    "openrouter_api_key": "OPENROUTER_API_KEY",
+    "openrouter_base_url": "OPENROUTER_BASE_URL",
     "azure_api_key": "AZURE_OPENAI_API_KEY",
     "azure_base_url": "AZURE_OPENAI_URL",
     "vllm_api_key": "VLLM_API_KEY",
@@ -114,7 +116,7 @@ def setup_logging(config: dict[str, Any], quiet: bool = False) -> None:
 
     Log files are rotated daily at midnight. Old logs are kept in the same
     directory with date suffix (e.g., feinn-2026-04-12.log).
-    
+
     Args:
         config: Configuration dictionary
         quiet: If True, suppress stderr output (useful for interactive mode)
@@ -127,7 +129,7 @@ def setup_logging(config: dict[str, Any], quiet: bool = False) -> None:
     log_file = config.get("log_file")
 
     handlers: list[logging.Handler] = []
-    
+
     # Only add stderr handler if not in quiet mode
     if not quiet:
         handlers.append(logging.StreamHandler(sys.stderr))

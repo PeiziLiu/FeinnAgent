@@ -63,10 +63,26 @@ async def _run_interactive(config: dict[str, Any]) -> None:
 
     agent = FeinnAgent(config=config, system_prompt=system)
 
+    # Initialize prompt_toolkit session for proper multibyte char handling
+    try:
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.formatted_text import HTML
+
+        session = PromptSession()
+        use_pt = True
+        prompt_msg = HTML("<cyan><b>feinn> </b></cyan>")
+    except ImportError:
+        session = None
+        use_pt = False
+        prompt_msg = None
+
     while True:
         try:
-            # Read input
-            user_input = input(click.style("feinn> ", fg="cyan", bold=True))
+            # Read input using prompt_toolkit for proper multibyte char handling
+            if use_pt:
+                user_input = await session.prompt_async(prompt_msg)
+            else:
+                user_input = input(click.style("feinn> ", fg="cyan", bold=True))
         except (EOFError, KeyboardInterrupt):
             click.echo("\nBye!")
             break

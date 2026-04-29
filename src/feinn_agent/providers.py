@@ -35,6 +35,7 @@ _PROVIDER_RULES: list[tuple[str, str]] = [
     (r"^kimi", "moonshot"),
     (r"^moonshot", "moonshot"),
     (r"^siliconflow/", "siliconflow"),
+    (r"^openrouter/", "openrouter"),
     (r"^ollama/", "ollama"),
     (r"^vllm/", "vllm"),
     (r"^lmstudio/", "lmstudio"),
@@ -50,6 +51,7 @@ _CONTEXT_LIMITS: dict[str, int] = {
     "deepseek": 128_000,
     "moonshot": 128_000,
     "siliconflow": 128_000,
+    "openrouter": 200_000,
     "ollama": 128_000,
     "vllm": 128_000,
     "lmstudio": 128_000,
@@ -64,6 +66,7 @@ _OPENAI_COMPAT_PROVIDERS = {
     "deepseek",
     "moonshot",
     "siliconflow",
+    "openrouter",
     "ollama",
     "vllm",
     "lmstudio",
@@ -87,16 +90,12 @@ def detect_provider(model: str) -> ProviderInfo:
         prefix, rest = model.split("/", 1)
         for _, prov in _PROVIDER_RULES:
             if prefix.lower() == prov:
-                return ProviderInfo(
-                    provider=prov, model=rest, context_limit=_CONTEXT_LIMITS.get(prov, 128_000)
-                )
+                return ProviderInfo(provider=prov, model=rest, context_limit=_CONTEXT_LIMITS.get(prov, 128_000))
 
     # Match by model name pattern
     for pattern, prov in _PROVIDER_RULES:
         if re.match(pattern, model, re.IGNORECASE):
-            return ProviderInfo(
-                provider=prov, model=model, context_limit=_CONTEXT_LIMITS.get(prov, 128_000)
-            )
+            return ProviderInfo(provider=prov, model=model, context_limit=_CONTEXT_LIMITS.get(prov, 128_000))
 
     # Default: OpenAI-compatible with custom base URL
     return ProviderInfo(provider="custom", model=model, context_limit=128_000)
@@ -112,6 +111,7 @@ def get_base_url(provider: str, config: dict[str, Any]) -> str:
         "deepseek": "https://api.deepseek.com/v1",
         "moonshot": "https://api.moonshot.cn/v1",
         "siliconflow": "https://api.siliconflow.cn/v1",
+        "openrouter": "https://openrouter.ai/api/v1",
         "ollama": "http://localhost:11434/v1",
         "vllm": "http://localhost:8000/v1",
         "lmstudio": "http://localhost:1234/v1",
@@ -172,7 +172,9 @@ async def _stream_anthropic(
     api_key = config.get("anthropic_api_key", "") or os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         logger.error("Anthropic API key not configured")
-        raise ValueError("Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable or config.anthropic_api_key")
+        raise ValueError(
+            "Anthropic API key not configured. Set ANTHROPIC_API_KEY environment variable or config.anthropic_api_key"
+        )
 
     client = AsyncAnthropic(api_key=api_key)
     logger.debug("Anthropic client initialized")
@@ -241,7 +243,9 @@ async def _stream_anthropic(
             if block.type == "tool_use":
                 tool_calls.append(ToolCall(id=block.id, name=block.name, input=block.input))
 
-    logger.info(f"Anthropic stream complete: input_tokens={input_tokens}, output_tokens={output_tokens}, tool_calls={len(tool_calls)}")
+    logger.info(
+        f"Anthropic stream complete: input_tokens={input_tokens}, output_tokens={output_tokens}, tool_calls={len(tool_calls)}"
+    )
     yield AssistantTurn(
         text="".join(text_parts),
         reasoning="".join(thinking_parts),
@@ -299,9 +303,29 @@ async def _stream_openai_compat(
         api_key = config.get("siliconflow_api_key", "") or os.environ.get("SILICONFLOW_API_KEY", "")
         if not api_key:
             logger.error("SiliconFlow API key not configured")
-            raise ValueError("SiliconFlow API key not configured. Set SILICONFLOW_API_KEY environment variable or config.siliconflow_api_key")
+            raise ValueError(
+                "SiliconFlow API key not configured. Set SILICONFLOW_API_KEY environment variable or config.siliconflow_api_key"
+            )
 
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url if base_url else None)
+    # OpenRouter
+    if info.provider == "openrouter":
+        api_key = config.get("openrouter_api_key", "") or os.environ.get("OPENROUTER_API_KEY", "")
+        if not api_key:
+            logger.error("OpenRouter API key not configured")
+            raise ValueError(
+                "OpenRouter API key not configured. Set OPENROUTER_API_KEY environment variable or config.openrouter_api_key"
+            )
+        # OpenRouter requires specific headers
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url if base_url else None,
+            default_headers={
+                "HTTP-Referer": "https://feinn-agent.local",
+                "X-Title": "FeinnAgent",
+            },
+        )
+    else:
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url if base_url else None)
     logger.debug("OpenAI client initialized")
 
     # Convert messages to OpenAI format
@@ -373,7 +397,9 @@ async def _stream_openai_compat(
             args = {"raw": acc.arguments}
         tool_calls.append(ToolCall(id=acc.id, name=acc.name, input=args))
 
-    logger.info(f"OpenAI-compatible stream complete: input_tokens={input_tokens}, output_tokens={output_tokens}, tool_calls={len(tool_calls)}")
+    logger.info(
+        f"OpenAI-compatible stream complete: input_tokens={input_tokens}, output_tokens={output_tokens}, tool_calls={len(tool_calls)}"
+    )
     yield AssistantTurn(
         text="".join(text_parts),
         reasoning="",
@@ -386,9 +412,7 @@ async def _stream_openai_compat(
 # ── Message format converters ───────────────────────────────────────
 
 
-def _to_anthropic_messages(
-    messages: list[Message], system: str
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _to_anthropic_messages(messages: list[Message], system: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Convert neutral messages to Anthropic API format."""
     system_blocks: list[dict[str, Any]] = [{"type": "text", "text": system}]
     api_messages: list[dict[str, Any]] = []
