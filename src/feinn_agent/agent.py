@@ -33,6 +33,8 @@ from .types import (
     TextChunk,
     ThinkingChunk,
     ToolCall,
+    ToolEnd,
+    ToolStart,
     TurnDone,
 )
 
@@ -180,10 +182,21 @@ class FeinnAgent:
                 )
                 return
 
+            # Emit ToolStart events
+            for tc in tool_calls:
+                logger.debug(f"Tool start: {tc.name}")
+                yield ToolStart(name=tc.name, inputs=tc.input, call_id=tc.id)
+
             # Execute tool calls
             logger.info(f"Executing {len(tool_calls)} tool calls: {[tc.name for tc in tool_calls]}")
             tool_results = await self._execute_tools(tool_calls)
             logger.debug(f"Tool execution complete: {len(tool_results)} results")
+
+            # Emit ToolEnd events
+            for tc, result in zip(tool_calls, tool_results):
+                permitted = "Permission denied" not in result
+                logger.debug(f"Tool end: {tc.name} permitted={permitted} ({len(result)} chars)")
+                yield ToolEnd(name=tc.name, result=result, call_id=tc.id, permitted=permitted)
 
             # Append tool results
             for tc, result in zip(tool_calls, tool_results):

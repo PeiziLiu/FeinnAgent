@@ -4,10 +4,10 @@ Provides Kawaii-style interface, diff display, tool preview,
 and other visualization utilities.
 """
 
+from __future__ import annotations
+
 import difflib
 import json
-import sys
-from dataclasses import dataclass
 from typing import Optional
 
 
@@ -590,3 +590,195 @@ class ToolPreview:
             return f"[{len(value)} items]"
         else:
             return str(value)
+
+
+# ── Spinner Engine ──────────────────────────────────────────────────
+
+
+class SpinnerEngine:
+    """Animated spinner with kawaii faces and elapsed time.
+
+    Usage:
+        spinner = SpinnerEngine()
+        frame = spinner.render(elapsed=5.2, message="Working...")
+        # "⠋ (｡◕‿◕｡) Working... (00:05)"
+    """
+
+    SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+    FACES_WAITING = [
+        "(｡◕‿◕｡)",
+        "(◕‿◕✿)",
+        "(◠‿◠)",
+        "(ᵔ◡ᵔ)",
+        "(•‿•)",
+    ]
+
+    FACES_THINKING = [
+        "(◕ ◡ ◕)",
+        "(◉ ◡ ◉)",
+        "(ﾉ◕ヮ◕)ﾉ",
+        "(⌒ ‿ ⌒)",
+    ]
+
+    def __init__(self, use_color: bool = True):
+        self.use_color = use_color
+        self._frame_index = 0
+        self._face_index = 0
+
+    def render(self, elapsed: float, message: str = "", thinking: bool = False) -> str:
+        """Render the current spinner frame.
+
+        Args:
+            elapsed: Seconds elapsed.
+            message: Status message.
+            thinking: Whether showing "thinking" vs "waiting" face set.
+
+        Returns:
+            Formatted spinner line.
+        """
+        self._frame_index = (self._frame_index + 1) % len(self.SPINNER_FRAMES)
+        spinner = self.SPINNER_FRAMES[self._frame_index]
+
+        faces = self.FACES_THINKING if thinking else self.FACES_WAITING
+        self._face_index = (self._face_index + 1) % len(faces)
+        face = faces[self._face_index]
+
+        elapsed_str = self._format_elapsed(elapsed)
+        parts = [spinner, face]
+        if message:
+            parts.append(message)
+        parts.append(f"({elapsed_str})")
+        return " ".join(parts)
+
+    def _format_elapsed(self, seconds: float) -> str:
+        """Format elapsed time as MM:SS or HH:MM:SS."""
+        secs = int(seconds)
+        if secs < 3600:
+            return f"{secs // 60:02d}:{secs % 60:02d}"
+        return f"{secs // 3600:02d}:{(secs % 3600) // 60:02d}:{secs % 60:02d}"
+
+
+# ── Tool emoji map ──────────────────────────────────────────────────
+
+TOOL_EMOJI: dict[str, str] = {
+    "Bash": "⚡",
+    "Read": "📖",
+    "Write": "📝",
+    "Edit": "✏️",
+    "Glob": "🔍",
+    "Grep": "🔎",
+    "WebFetch": "🌐",
+    "Skill": "🧠",
+    "SkillList": "📋",
+    "SkillManage": "🔧",
+    "MemorySave": "💾",
+    "MemorySearch": "🔎",
+    "MemoryDelete": "🗑️",
+    "MemoryList": "📋",
+    "SessionSearch": "🔍",
+    "AskUserQuestion": "💬",
+}
+
+
+def get_tool_emoji(tool_name: str) -> str:
+    """Get emoji for a tool name."""
+    return TOOL_EMOJI.get(tool_name, "⚙️")
+
+
+# ── Tool card rendering ─────────────────────────────────────────────
+
+
+def render_tool_card(tool_name: str, args: dict | None = None, status: str = "running") -> str:
+    """Render a tool execution card.
+
+    Args:
+        tool_name: Name of the tool.
+        args: Tool arguments.
+        status: "running" | "success" | "error" | "denied".
+
+    Returns:
+        Formatted tool card string.
+    """
+    emoji = get_tool_emoji(tool_name)
+    if status == "running":
+        return f"  {emoji} {Colors.BOLD}{tool_name}{Colors.RESET}{_format_args_summary(args)}"
+    elif status == "success":
+        return f"  └─ {Colors.GREEN}✓{Colors.RESET} {tool_name} completed"
+    elif status == "denied":
+        return f"  └─ {Colors.RED}✗{Colors.RESET} {tool_name} denied"
+    elif status == "error":
+        return f"  └─ {Colors.RED}✗{Colors.RESET} {tool_name} failed"
+    return f"  {emoji} {tool_name}"
+
+
+def _format_args_summary(args: dict | None) -> str:
+    """Format tool args as a one-line summary."""
+    if not args:
+        return ""
+    first_val = next(iter(args.values()), "")
+    if isinstance(first_val, str) and len(first_val) > 40:
+        first_val = first_val[:40] + "..."
+    return f" {first_val}"
+
+
+# ── Enhanced diff display ───────────────────────────────────────────
+
+
+def render_diff_text(diff_text: str, max_lines: int = 20) -> str:
+    """Render a unified diff with color coding.
+
+    Args:
+        diff_text: Raw unified diff text.
+        max_lines: Max lines to show before truncation.
+
+    Returns:
+        Color-coded diff string.
+    """
+    lines = diff_text.splitlines()
+    truncated = len(lines) > max_lines
+    shown = lines[:max_lines]
+
+    result: list[str] = []
+    for line in shown:
+        if line.startswith("+") and not line.startswith("+++"):
+            result.append(f"{Colors.GREEN}{line}{Colors.RESET}")
+        elif line.startswith("-") and not line.startswith("---"):
+            result.append(f"{Colors.RED}{line}{Colors.RESET}")
+        elif line.startswith("@@"):
+            result.append(f"{Colors.CYAN}{line}{Colors.RESET}")
+        elif line.startswith("---") or line.startswith("+++"):
+            result.append(f"{Colors.BOLD}{Colors.BRIGHT_BLACK}{line}{Colors.RESET}")
+        else:
+            result.append(line)
+
+    if truncated:
+        result.append(f"{Colors.BRIGHT_BLACK}... ({len(lines) - max_lines} more lines){Colors.RESET}")
+
+    return "\n".join(result)
+
+
+def render_diff_summary(diff_text: str) -> str:
+    """Render a one-line diff summary.
+
+    Args:
+        diff_text: Raw unified diff text.
+
+    Returns:
+        Summary like "+5 | ~3 | -1".
+    """
+    added = 0
+    removed = 0
+    for line in diff_text.splitlines():
+        if line.startswith("+") and not line.startswith("+++"):
+            added += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            removed += 1
+    parts: list[str] = []
+    if added:
+        parts.append(f"{Colors.GREEN}+{added}{Colors.RESET}")
+    if removed:
+        parts.append(f"{Colors.RED}-{removed}{Colors.RESET}")
+    if not parts:
+        return f"{Colors.BRIGHT_BLACK}no changes{Colors.RESET}"
+    return " | ".join(parts)

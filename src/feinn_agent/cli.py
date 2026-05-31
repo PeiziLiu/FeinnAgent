@@ -11,12 +11,22 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import os
+import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import click
 
 from .config import load_config, setup_logging
 from .context import build_system_prompt
+from .display import (
+    Colors,
+    SpinnerEngine,
+    render_diff_summary,
+    render_diff_text,
+    render_tool_card,
+)
 
 if TYPE_CHECKING:
     from .agent import FeinnAgent
@@ -38,46 +48,252 @@ from .types import (
 
 display = KawaiiDisplay()
 
+# ── Thread-safe printing ────────────────────────────────────────────
+
+_cprint_use_pt = False
+
+
+def _init_cprint():
+    """Initialize cross-thread safe printing via prompt_toolkit."""
+    global _cprint_use_pt
+    import importlib.util
+
+    _cprint_use_pt = importlib.util.find_spec("prompt_toolkit") is not None
+
+
+def _cprint(text: str, **kwargs: Any) -> None:
+    """Thread-safe print that won't corrupt the TUI input area."""
+    if _cprint_use_pt:
+        try:
+            from prompt_toolkit import print_formatted_text as _pt_print
+            from prompt_toolkit.formatted_text import ANSI as _PT_ANSI
+
+            _pt_print(_PT_ANSI(text), **kwargs)
+        except Exception:
+            click.echo(text, **kwargs)
+    else:
+        click.echo(text, **kwargs)
+
 
 def _ensure_builtins() -> None:
-    """Ensure all tool modules are imported so they register."""
-    # Import and register builtin skills
-    from .skill import register_builtin_skills
-
-    register_builtin_skills()
+    """Ensure built-in tools are registered. Called before agent creation."""
+    pass  # Registration happens at import time via from .tools import builtins
 
 
-def _make_permission_callback(config: dict[str, Any]) -> PermissionCallback:
-    """Create a permission callback that captures the config reference."""
+try:
+    from prompt_toolkit.completion.base import Completer as _CompleterBase
+except ImportError:
+    _CompleterBase = object
 
-    async def _callback(request: PermissionRequest) -> bool:
-        click.echo()
-        click.echo(click.style("  ┌─ Permission Request", fg="yellow", bold=True))
-        click.echo(click.style(f"  │ Tool: {request.name}", fg="bright_black"))
-        first_val = next(iter(request.inputs.values()), "")
-        if isinstance(first_val, str) and len(first_val) > 60:
-            first_val = first_val[:60] + "..."
-        click.echo(click.style(f"  │ Args: {first_val}", fg="bright_black"))
-        click.echo(click.style("  └─", fg="yellow"))
+
+class FeinnCompleter(_CompleterBase):
+    """Completes slash commands, skill activators, @-references, and file paths.
+
+    Used as the ``completer`` for prompt_toolkit's PromptSession.
+    """
+
+    COMMANDS = [
+        "/quit",
+        "/help",
+        "/clear",
+        "/save",
+        "/model",
+        "/tasks",
+        "/memory",
+        "/skills",
+        "/config",
+        "/accept-all",
+        "/auto",
+        "/manual",
+        "/plan",
+        "/checkpoint",
+        "/interrupt",
+        "/resume",
+        "/trajectory",
+    ]
+
+    SKILL_ACTIVATORS: list[str] = []
+
+    @classmethod
+    def refresh_skills(cls) -> None:
+        """Reload skill activators from disk."""
+        try:
+            from .skill.loader import load_skills
+
+            skills = load_skills()
+            cls.SKILL_ACTIVATORS = [a for s in skills if s.visible_to_user for a in s.activators]
+        except Exception:
+            pass
+
+    def get_completions(self, document: Any, complete_event: Any) -> Any:
+        """Yield completions for the current word."""
+        try:
+            from prompt_toolkit.completion import Completion
+        except ImportError:
+            return
+
+        word = document.get_word_before_cursor()
+        if not word:
+            return
+
+        word_lower = word.lower()
+
+        if word.startswith("/"):
+            candidates = self.COMMANDS + self.SKILL_ACTIVATORS
+            for c in candidates:
+                if c.lower().startswith(word_lower):
+                    yield Completion(c, -len(word))
+        elif word.startswith("@"):
+            refs = ["@file:", "@folder:", "@git:", "@diff", "@staged"]
+            for r in refs:
+                if r.lower().startswith(word_lower):
+                    yield Completion(r, -len(word))
+        elif any(word.startswith(p) for p in ("./", "../", "~/", "/")):
+            try:
+                base = word
+                dir_part = os.path.dirname(base) or "."
+                prefix = os.path.basename(base)
+                expanded = os.path.expanduser(dir_part)
+                if os.path.isdir(expanded):
+                    for entry in sorted(os.listdir(expanded)):
+                        if entry.startswith(prefix):
+                            full = os.path.join(dir_part, entry)
+                            if os.path.isdir(os.path.expanduser(full)):
+                                entry += "/"
+                            yield Completion(entry, -len(prefix))
+            except Exception:
+                pass
+
+
+# ── Permission callback with session allowlist ──────────────────────
+
+_session_allowlist: set[str] = set()
+
+
+def _make_permission_callback(config: dict[str, Any]) -> Any:
+    """Create a permission callback with session allowlist and diff preview."""
+
+    async def _callback(request: Any) -> bool:
+        if request.name in _session_allowlist:
+            return True
+
+        _cprint("")
+        _cprint(
+            f"{Colors.YELLOW}  ┌─ Permission Request{Colors.RESET}\n"
+            f"  │ {Colors.BRIGHT_BLACK}Tool:{Colors.RESET} {request.name}\n"
+        )
+
+        for key, val in request.inputs.items():
+            if isinstance(val, str) and len(val) > 80:
+                val = val[:80] + "..."
+            _cprint(f"  │ {Colors.BRIGHT_BLACK}{key}:{Colors.RESET} {val}")
+
+        # Diff preview for Write/Edit
+        if request.name in ("Write", "Edit") and "file_path" in request.inputs:
+            fpath = request.inputs.get("file_path", "")
+            old_content = request.inputs.get("content", "") or request.inputs.get("new_string", "")
+            try:
+                expanded = os.path.expanduser(fpath)
+                old_lines: list[str] = []
+                if os.path.isfile(expanded):
+                    with open(expanded, encoding="utf-8", errors="replace") as f:
+                        old_lines = f.read().splitlines()
+                new_lines = old_content.splitlines()
+                if old_lines or new_lines:
+                    import difflib
+
+                    diff = list(difflib.unified_diff(old_lines, new_lines, lineterm=""))
+                    if diff:
+                        _cprint(f"  │ {Colors.BRIGHT_BLACK}diff preview:{Colors.RESET}")
+                        for line in diff[:10]:
+                            _cprint(f"  │  {render_diff_text(line)}")
+                        if len(diff) > 10:
+                            _cprint(f"  │  {Colors.BRIGHT_BLACK}... ({len(diff) - 10} more lines){Colors.RESET}")
+            except Exception:
+                pass
+
+        _cprint(f"  {Colors.YELLOW}└─{Colors.RESET}")
+
         try:
             from prompt_toolkit import PromptSession
 
             session = PromptSession()
-            answer = await session.prompt_async(click.style("  Allow? (y/n/A): ", fg="yellow"))
+            answer = await session.prompt_async("  Allow? (y/n/A/s): ")
         except ImportError:
-            answer = input(click.style("  Allow? (y/n/A): ", fg="yellow"))
+            answer = input("  Allow? (y/n/A/s): ")
+
         answer = answer.strip().lower()
         if answer == "a":
             config["permission_mode"] = PermissionMode.ACCEPT_ALL.value
-            click.echo(click.style("  → Permission mode set to accept-all", fg="green"))
+            _cprint(f"  {Colors.GREEN}→ Permission mode set to accept-all{Colors.RESET}")
             return True
+        elif answer == "s":
+            _session_allowlist.add(request.name)
+            _cprint(f"  {Colors.GREEN}→ {request.name} allowed for this session{Colors.RESET}")
+            return True
+        elif answer == "d":
+            _cprint(f"  {Colors.RED}→ Denied{Colors.RESET}")
+            return False
         return answer in ("y", "yes")
 
     return _callback
 
 
-async def _run_interactive(config: dict[str, Any]) -> None:
-    """Run the interactive REPL loop."""
+# ── Spinner background task ──────────────────────────────────────────
+
+_CLEAR_LINE = "\r" + " " * 100 + "\r"
+
+
+async def _run_spinner(spinner: SpinnerEngine, start_time: float, message: str = "") -> None:
+    """Animate spinner on its own line using \r until cancelled."""
+    try:
+        while True:
+            elapsed = time.time() - start_time
+            frame = spinner.render(elapsed, message)
+            print(f"\r{frame}", end="", flush=True)
+            await asyncio.sleep(0.1)
+    except asyncio.CancelledError:
+        print(_CLEAR_LINE, end="", flush=True)
+        raise
+
+
+async def _stop_spinner(spinner_task: asyncio.Task[None] | None) -> None:
+    """Cancel spinner task and wait for its cleanup (clear line) to finish."""
+    if spinner_task is None:
+        return
+    spinner_task.cancel()
+    try:
+        await spinner_task
+    except asyncio.CancelledError:
+        pass
+
+
+def _run_interactive(config: dict[str, Any]) -> None:
+    """Run the interactive REPL loop.
+
+    Uses FeinnTUI when prompt_toolkit is available (primary path),
+    falls back to legacy PromptSession-based async REPL.
+    """
+    _ensure_builtins()
+
+    try:
+        from .cli_tui import FeinnTUI
+
+        tui = FeinnTUI(config)
+        tui._init_mcp = _init_mcp_for_tui
+        tui._shutdown_mcp = shutdown_mcp
+        tui.run()
+    except ImportError:
+        asyncio.run(_run_interactive_legacy_async(config))
+
+
+def _init_mcp_for_tui(config: dict[str, Any]) -> None:
+    """Initialize MCP for the TUI's agent thread."""
+    init_mcp(config)
+
+
+async def _run_interactive_legacy_async(config: dict[str, Any]) -> None:
+    """Legacy interactive REPL using PromptSession (fallback path)."""
     from .agent import FeinnAgent
 
     _ensure_builtins()
@@ -85,22 +301,44 @@ async def _run_interactive(config: dict[str, Any]) -> None:
 
     system = build_system_prompt(config)
 
-    # Welcome banner
-    click.echo(click.style("\n  FeinnAgent v0.1.0", fg="cyan", bold=True))
-    click.echo(click.style(f"  Model: {config['model']}", fg="yellow"))
-    click.echo(click.style("  Type '/quit' to exit, '/help' for commands\n", fg="bright_black"))
+    _cprint(display.show_welcome(config.get("model", "?")))
 
     perm_callback = _make_permission_callback(config)
     agent = FeinnAgent(config=config, system_prompt=system, permission_callback=perm_callback)
 
-    # Initialize prompt_toolkit session for proper multibyte char handling
+    FeinnCompleter.refresh_skills()
+
+    # Initialize prompt_toolkit PromptSession with multi-line, completions, history
     try:
         from prompt_toolkit import PromptSession
         from prompt_toolkit.formatted_text import HTML
+        from prompt_toolkit.history import FileHistory
+        from prompt_toolkit.key_binding import KeyBindings
 
-        session = PromptSession()
-        use_pt = True
+        history_dir = Path.home() / ".feinn"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        history = FileHistory(str(history_dir / "history"))
+
+        kb = KeyBindings()
+
+        @kb.add("c-c")
+        def _cancel_or_clear(event: Any) -> None:
+            """Ctrl+C: clear buffer if not empty, otherwise exit."""
+            buf = event.current_buffer
+            if buf.text:
+                buf.text = ""
+            else:
+                raise KeyboardInterrupt()
+
+        session = PromptSession(
+            history=history,
+            completer=FeinnCompleter(),
+            complete_while_typing=True,
+            multiline=True,
+            key_bindings=kb,
+        )
         prompt_msg = HTML("<cyan><b>feinn> </b></cyan>")
+        use_pt = True
     except ImportError:
         session = None
         use_pt = False
@@ -108,63 +346,75 @@ async def _run_interactive(config: dict[str, Any]) -> None:
 
     while True:
         try:
-            # Read input using prompt_toolkit for proper multibyte char handling
             if use_pt:
                 user_input = await session.prompt_async(prompt_msg)
             else:
                 user_input = input(click.style("feinn> ", fg="cyan", bold=True))
         except (EOFError, KeyboardInterrupt):
-            click.echo("\nBye!")
+            _cprint("\nBye!")
             break
 
         user_input = user_input.strip()
         if not user_input:
             continue
 
-        # Slash commands
         if user_input.startswith("/"):
             handled = _handle_command(user_input, agent, config)
             if handled:
                 continue
 
-        # Check for skill activator (e.g., "/weather", "/commit")
         skill_prompt = _try_handle_skill(user_input)
         if skill_prompt:
-            # Replace user input with rendered skill template
             user_input = skill_prompt
 
-        # Run agent
+        spinner_task: asyncio.Task[None] | None = None
+        spinner: SpinnerEngine | None = None
+        spinner_start = 0.0
+
         try:
-            tool_depth = 0
-            thinking_shown = False
             thinking_content = ""
-            tool_name = ""
 
             async for event in agent.run(user_input):
-                if isinstance(event, TextChunk):
-                    click.echo(event.text, nl=False)
-                elif isinstance(event, ThinkingChunk):
-                    if not thinking_shown:
-                        thinking_shown = True
-                        thinking_content = event.thinking
+                if isinstance(event, ThinkingChunk):
+                    thinking_content += event.thinking
+                    if spinner_task is None:
+                        spinner = SpinnerEngine()
+                        spinner_start = time.time()
+                        spinner_task = asyncio.create_task(_run_spinner(spinner, spinner_start, "Thinking..."))
+
+                elif isinstance(event, TextChunk):
+                    await _stop_spinner(spinner_task)
+                    spinner_task = None
+                    print(event.text, end="", flush=True)
+
                 elif isinstance(event, ToolStart):
-                    tool_depth += 1
-                    tool_name = event.name
-                    if tool_depth == 1:
-                        click.echo()
-                        first_val = next(iter(event.inputs.values()), "")
-                        if isinstance(first_val, str) and len(first_val) > 40:
-                            first_val = first_val[:40] + "..."
-                        tool_args = {"args": first_val} if first_val else None
-                        click.echo(display.show_tool_execution(event.name, "start", tool_args))
+                    await _stop_spinner(spinner_task)
+                    print(render_tool_card(event.name, event.inputs, "running"))
+                    spinner = SpinnerEngine()
+                    spinner_start = time.time()
+                    spinner_task = asyncio.create_task(_run_spinner(spinner, spinner_start, f"Running {event.name}..."))
+
                 elif isinstance(event, ToolEnd):
-                    tool_depth -= 1
-                    if tool_depth == 0:
-                        click.echo(display.show_tool_execution(tool_name, "success"))
+                    await _stop_spinner(spinner_task)
+                    spinner_task = None
+                    status = "success" if event.permitted else "error"
+                    print(render_tool_card(event.name, status=status))
+
+                    if event.name in ("Write", "Edit") and event.permitted and event.result:
+                        for line in event.result.splitlines():
+                            if line.startswith("@@"):
+                                diff_summary = render_diff_summary(event.result)
+                                print(f"  {Colors.BRIGHT_BLACK}diff:{Colors.RESET} {diff_summary}")
+                                break
+
                 elif isinstance(event, TurnDone):
-                    pass
+                    await _stop_spinner(spinner_task)
+                    spinner_task = None
+
                 elif isinstance(event, AgentDone):
-                    click.echo()
+                    await _stop_spinner(spinner_task)
+                    spinner_task = None
+                    print()
                     cost = 0.0
                     try:
                         from .providers import estimate_cost
@@ -176,7 +426,7 @@ async def _run_interactive(config: dict[str, Any]) -> None:
                         )
                     except Exception:
                         pass
-                    click.echo(
+                    print(
                         display.show_status_summary(
                             turn_count=event.turn_count,
                             input_tokens=event.total_input_tokens,
@@ -185,9 +435,12 @@ async def _run_interactive(config: dict[str, Any]) -> None:
                         )
                     )
                     if thinking_content:
-                        click.echo(display.show_thinking_collapsed(thinking_content))
+                        print(display.show_thinking_collapsed(thinking_content))
+
+        except asyncio.CancelledError:
+            print(f"{Colors.YELLOW}⏹  Interrupted{Colors.RESET}")
         except Exception as e:
-            click.echo(click.style(f"\n❌ Error: {e}", fg="red"))
+            print(f"{Colors.RED}❌ Error: {e}{Colors.RESET}")
 
     shutdown_mcp()
 
@@ -480,14 +733,32 @@ def main(
         run_server(config)
     elif interactive or (not prompt and not serve):
         # Interactive REPL (default when no prompt provided)
-        asyncio.run(_run_interactive(config))
+        _run_interactive(config)
     else:
         # One-shot mode
-        asyncio.run(_run_oneshot(prompt, config))
+        _run_oneshot(prompt, config)
 
 
-async def _run_oneshot(prompt: str, config: dict[str, Any]) -> None:
-    """Run a single query and print the result."""
+def _run_oneshot(prompt: str, config: dict[str, Any]) -> None:
+    """Run a single query with enhanced display (tool cards, diff, spinner).
+
+    Uses FeinnTUI for the TUI chrome, then exits after agent completes.
+    """
+    _ensure_builtins()
+
+    try:
+        from .cli_tui import FeinnTUI
+
+        tui = FeinnTUI(config)
+        tui._init_mcp = _init_mcp_for_tui
+        tui._shutdown_mcp = shutdown_mcp
+        tui.run(prompt)
+    except ImportError:
+        asyncio.run(_run_oneshot_legacy(prompt, config))
+
+
+async def _run_oneshot_legacy(prompt: str, config: dict[str, Any]) -> None:
+    """Legacy one-shot mode using async print (fallback path)."""
     from .agent import FeinnAgent
 
     _ensure_builtins()
@@ -496,15 +767,46 @@ async def _run_oneshot(prompt: str, config: dict[str, Any]) -> None:
     system = build_system_prompt(config)
     agent = FeinnAgent(config=config, system_prompt=system)
 
+    spinner_task: asyncio.Task[None] | None = None
+    spinner: SpinnerEngine | None = None
+    spinner_start = 0.0
+
     try:
         async for event in agent.run(prompt):
-            if isinstance(event, TextChunk):
-                click.echo(event.text, nl=False)
-            elif isinstance(event, AgentDone):
-                click.echo()  # final newline
-    except Exception as e:
-        click.echo(f"\nError: {e}", err=True)
+            if isinstance(event, ThinkingChunk):
+                if spinner_task is None:
+                    spinner = SpinnerEngine()
+                    spinner_start = time.time()
+                    spinner_task = asyncio.create_task(_run_spinner(spinner, spinner_start, "Thinking..."))
 
+            elif isinstance(event, TextChunk):
+                await _stop_spinner(spinner_task)
+                spinner_task = None
+                print(event.text, end="", flush=True)
+
+            elif isinstance(event, ToolStart):
+                await _stop_spinner(spinner_task)
+                spinner_task = None
+                print(render_tool_card(event.name, event.inputs, "running"))
+                spinner = SpinnerEngine()
+                spinner_start = time.time()
+                spinner_task = asyncio.create_task(_run_spinner(spinner, spinner_start, f"Running {event.name}..."))
+
+            elif isinstance(event, ToolEnd):
+                await _stop_spinner(spinner_task)
+                spinner_task = None
+                status = "success" if event.permitted else "error"
+                print(render_tool_card(event.name, status=status))
+
+            elif isinstance(event, AgentDone):
+                await _stop_spinner(spinner_task)
+                spinner_task = None
+                print()
+    except Exception as e:
+        print(f"\nError: {e}")
+
+    if spinner_task is not None:
+        spinner_task.cancel()
     shutdown_mcp()
 
 
