@@ -47,6 +47,35 @@ def _ensure_builtins() -> None:
     register_builtin_skills()
 
 
+def _make_permission_callback(config: dict[str, Any]) -> PermissionCallback:
+    """Create a permission callback that captures the config reference."""
+
+    async def _callback(request: PermissionRequest) -> bool:
+        click.echo()
+        click.echo(click.style("  ┌─ Permission Request", fg="yellow", bold=True))
+        click.echo(click.style(f"  │ Tool: {request.name}", fg="bright_black"))
+        first_val = next(iter(request.inputs.values()), "")
+        if isinstance(first_val, str) and len(first_val) > 60:
+            first_val = first_val[:60] + "..."
+        click.echo(click.style(f"  │ Args: {first_val}", fg="bright_black"))
+        click.echo(click.style("  └─", fg="yellow"))
+        try:
+            from prompt_toolkit import PromptSession
+
+            session = PromptSession()
+            answer = await session.prompt_async(click.style("  Allow? (y/n/A): ", fg="yellow"))
+        except ImportError:
+            answer = input(click.style("  Allow? (y/n/A): ", fg="yellow"))
+        answer = answer.strip().lower()
+        if answer == "a":
+            config["permission_mode"] = PermissionMode.ACCEPT_ALL.value
+            click.echo(click.style("  → Permission mode set to accept-all", fg="green"))
+            return True
+        return answer in ("y", "yes")
+
+    return _callback
+
+
 async def _run_interactive(config: dict[str, Any]) -> None:
     """Run the interactive REPL loop."""
     from .agent import FeinnAgent
@@ -61,7 +90,8 @@ async def _run_interactive(config: dict[str, Any]) -> None:
     click.echo(click.style(f"  Model: {config['model']}", fg="yellow"))
     click.echo(click.style("  Type '/quit' to exit, '/help' for commands\n", fg="bright_black"))
 
-    agent = FeinnAgent(config=config, system_prompt=system)
+    perm_callback = _make_permission_callback(config)
+    agent = FeinnAgent(config=config, system_prompt=system, permission_callback=perm_callback)
 
     # Initialize prompt_toolkit session for proper multibyte char handling
     try:

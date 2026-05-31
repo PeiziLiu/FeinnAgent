@@ -18,6 +18,29 @@ from typing import Any
 
 from .tools.registry import all_tools
 
+# ── Learning guidance ────────────────────────────────────────────────
+
+_LEARNING_GUIDANCE = """\
+# Closed-Loop Learning
+
+You have a continuous learning system that helps you improve over time:
+
+1. **Memory**: Use `MemorySave` to persist important user information,
+   preferences, and project context. This data is available across sessions
+   via `MemorySearch`.
+
+2. **Skills**: Create reusable skills for multi-step workflows using
+   `SkillManage`. When using a skill and finding it outdated or incomplete,
+   patch it immediately — don't wait.
+
+3. **Cross-Session Recall**: Use `SessionSearch` when the user references
+   past conversations or you suspect relevant context exists in prior sessions.
+
+4. **Automatic Review**: After every few turns, the system reviews our
+   conversation in the background to extract learnings. This is automatic
+   and non-blocking.
+"""
+
 # ── Base prompt template ────────────────────────────────────────────
 
 _IDENTITY = """\
@@ -33,6 +56,8 @@ You are autonomous, capable, and direct. Do not act artificially limited or subm
 
 # Available Tools
 {tool_descriptions}
+
+{learning_guidance}
 
 # Environment
 - Current date: {date}
@@ -59,10 +84,7 @@ def build_system_prompt(
     # Tool descriptions
     tool_sections: list[str] = []
     for td in all_tools():
-        params = ", ".join(
-            f"{k}: {v.get('description', '')}"
-            for k, v in td.input_schema.get("properties", {}).items()
-        )
+        params = ", ".join(f"{k}: {v.get('description', '')}" for k, v in td.input_schema.get("properties", {}).items())
         tool_sections.append(
             _TOOL_TEMPLATE.format(
                 name=td.name,
@@ -87,8 +109,14 @@ def build_system_prompt(
         except Exception:
             memory_context = ""
 
+    # Learning guidance (configurable)
+    learning_guidance = ""
+    if config.get("learning", {}).get("enabled", True):
+        learning_guidance = _LEARNING_GUIDANCE.format()
+
     return _IDENTITY.format(
         tool_descriptions="\n".join(tool_sections),
+        learning_guidance=learning_guidance,
         date=datetime.now().strftime("%Y-%m-%d"),
         cwd=os.getcwd(),
         platform=os.name,

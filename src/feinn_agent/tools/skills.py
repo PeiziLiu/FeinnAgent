@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from ..skill.loader import (
@@ -11,9 +12,19 @@ from ..skill.loader import (
     load_skills,
     render_template,
 )
+from ..skill.usage import SkillState, UsageStore
 from ..types import ToolDef
 
 logger = logging.getLogger(__name__)
+
+_usage_store: UsageStore | None = None
+
+
+def _get_usage_store() -> UsageStore:
+    global _usage_store
+    if _usage_store is None:
+        _usage_store = UsageStore()
+    return _usage_store
 
 
 async def _skill_tool(params: dict[str, Any], config: dict[str, Any]) -> str:
@@ -49,6 +60,12 @@ async def _skill_tool(params: dict[str, Any], config: dict[str, Any]) -> str:
     # Render the skill template
     rendered = render_template(template.template, skill_params, template.param_names)
 
+    # Record usage telemetry
+    try:
+        _get_usage_store().record_use(template.skill_id)
+    except Exception:
+        logger.debug("Failed to record skill usage (non-fatal)", exc_info=True)
+
     # For tool execution, we return the rendered prompt
     # The agent will then process this as a user message
     result = f"[Skill: {template.skill_id}]\n\n{rendered}"
@@ -70,6 +87,15 @@ async def _skill_list_tool(params: dict[str, Any], config: dict[str, Any]) -> st
     """
     templates = load_skills()
 
+    # Record view telemetry for all visible skills
+    try:
+        store = _get_usage_store()
+        for t in templates:
+            if t.visible_to_user:
+                store.record_view(t.skill_id)
+    except Exception:
+        logger.debug("Failed to record skill view (non-fatal)", exc_info=True)
+
     if not templates:
         return "No skills available. Create skills in ~/.feinn/skills/ or .feinn/skills/"
 
@@ -85,10 +111,7 @@ async def _skill_list_tool(params: dict[str, Any], config: dict[str, Any]) -> st
         tools = f"\n    tools: {', '.join(tmpl.allowed_tools)}" if tmpl.allowed_tools else ""
         mode = f"\n    mode: {tmpl.exec_mode}" if tmpl.exec_mode != "direct" else ""
 
-        lines.append(
-            f"- **{tmpl.skill_id}** [{activators}]{hint}\n"
-            f"  {tmpl.summary}{when}{tools}{mode}"
-        )
+        lines.append(f"- **{tmpl.skill_id}** [{activators}]{hint}\n  {tmpl.summary}{when}{tools}{mode}")
 
     return "\n".join(lines)
 
@@ -121,6 +144,134 @@ SKILL_TOOL_DEF = ToolDef(
     read_only=False,
     concurrent_safe=False,
 )
+
+# ── SkillManage tool ─────────────────────────────────────────────────
+
+
+async def _skill_manage_tool(params: dict[str, Any], config: dict[str, Any]) -> str:
+    """Create, patch, or delete skills.
+
+    Args:
+        params: Tool parameters
+            - action: "create", "patch", or "delete"
+            - id: Skill identifier
+            - summary: One-line description (for create)
+            - template: Skill template body (for create/patch)
+            - activators: Trigger phrases (for create)
+            - tools: Allowed tool names (for create)
+            - param_names: Template parameter names (for create)
+            - param_guide: Parameter usage hint (for create)
+        config: Agent configuration
+
+    Returns:
+        Result message
+    """
+    action = params.get("action", "").strip().lower()
+    skill_id = params.get("id", "").strip()
+
+    if not action:
+        return "Error: 'action' is required (create, patch, or delete)"
+    if not skill_id:
+        return "Error: 'id' is required"
+
+    if action == "create":
+        from ..skill.auto_create import create_skill
+
+        try:
+            skill_file = create_skill(
+                skill_id=skill_id,
+                summary=params.get("summary", f"Auto-created skill: {skill_id}"),
+                template_body=params.get("template", ""),
+                activators=params.get("activators"),
+                tools=params.get("tools"),
+                param_names=params.get("param_names"),
+                param_guide=params.get("param_guide", ""),
+            )
+            try:
+                _get_usage_store().record_use(skill_id)
+            except Exception:
+                pass
+            return f"Created skill: {skill_id} ({skill_file})"
+        except ValueError as e:
+            return f"Error creating skill: {e}"
+
+    elif action == "patch":
+        from ..skill.auto_create import patch_skill
+
+        success = patch_skill(
+            skill_id=skill_id,
+            template_body=params.get("template"),
+            summary=params.get("summary"),
+            add_tools=params.get("tools"),
+        )
+        if success:
+            try:
+                _get_usage_store().record_patch(skill_id)
+            except Exception:
+                pass
+            return f"Patched skill: {skill_id}"
+        return f"Skill not found or patch blocked: {skill_id}"
+
+    elif action == "delete":
+        from ..skill.curator import archive_skill
+
+        skill_dir = str(Path.home() / ".feinn" / "skills") if not config else None
+        success = archive_skill(skill_id, str(Path.home() / ".feinn" / "skills"))
+        if success:
+            try:
+                _get_usage_store().set_state(skill_id, SkillState.ARCHIVED)
+            except Exception:
+                pass
+            return f"Deleted (archived) skill: {skill_id}"
+        return f"Skill not found or deletion failed: {skill_id}"
+
+    return f"Error: unknown action '{action}' (use create, patch, or delete)"
+
+
+SKILL_MANAGE_TOOL_DEF = ToolDef(
+    name="SkillManage",
+    description=(
+        "Create, patch, or delete skills. Use 'create' to make new reusable templates, "
+        "'patch' to update an existing skill, or 'delete' to remove one. "
+        "Skill templates are stored as SKILL.md files with YAML frontmatter."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["create", "patch", "delete"],
+                "description": "Operation to perform",
+            },
+            "id": {"type": "string", "description": "Skill identifier"},
+            "summary": {"type": "string", "description": "One-line description (for create)"},
+            "template": {"type": "string", "description": "Skill template body (for create/patch)"},
+            "activators": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Trigger phrases like ['/my-skill']",
+            },
+            "tools": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Allowed tool names",
+            },
+            "param_names": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Template parameter names",
+            },
+            "param_guide": {
+                "type": "string",
+                "description": "Parameter usage hint",
+            },
+        },
+        "required": ["action", "id"],
+    },
+    handler=_skill_manage_tool,
+    read_only=False,
+)
+
 
 SKILL_LIST_TOOL_DEF = ToolDef(
     name="SkillList",

@@ -377,6 +377,30 @@ class KawaiiDisplay:
             return f"  └─ {self._color('✅', Colors.GREEN)}"
         return ""
 
+    def show_thinking_collapsed(self, thinking: str, max_lines: int = 8) -> str:
+        """Show thinking/reasoning content in collapsed form.
+
+        Args:
+            thinking: The full thinking content.
+            max_lines: Max lines to show before truncation.
+
+        Returns:
+            Formatted collapsed thinking string.
+        """
+        lines = thinking.strip().split("\n")
+        truncated = len(lines) > max_lines
+        shown = lines[:max_lines]
+
+        output = [
+            self._color("┌─ 🤔 Thinking", Colors.BRIGHT_BLACK),
+        ]
+        for line in shown:
+            output.append(f"│ {self._color(line, Colors.BRIGHT_BLACK)}")
+        if truncated:
+            output.append(f"│ {self._color(f'... ({len(lines) - max_lines} more lines)', Colors.BRIGHT_BLACK)}")
+        output.append(self._color("└" + "─" * 40, Colors.BRIGHT_BLACK))
+        return "\n".join(output)
+
     def show_status_summary(
         self,
         turn_count: int,

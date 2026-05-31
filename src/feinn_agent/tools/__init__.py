@@ -8,3 +8,8 @@ from .tmux import register_tmux_tools
 
 # Register tmux tools if tmux binary is available on the system.
 register_tmux_tools()
+
+# Register learning system tools
+from ..learning.session_search import register_session_search_tool
+
+register_session_search_tool()

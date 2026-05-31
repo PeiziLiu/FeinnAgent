@@ -11,11 +11,12 @@ from ..types import ToolDef
 from .output import generate_unified_diff, truncate_diff, truncate_output
 from .process import run_command
 from .registry import register
-from .skills import SKILL_LIST_TOOL_DEF, SKILL_TOOL_DEF
+from .skills import SKILL_LIST_TOOL_DEF, SKILL_MANAGE_TOOL_DEF, SKILL_TOOL_DEF
 
 # Register skill tools
 register(SKILL_TOOL_DEF)
 register(SKILL_LIST_TOOL_DEF)
+register(SKILL_MANAGE_TOOL_DEF)
 
 # ── Read ────────────────────────────────────────────────────────────
 
@@ -328,11 +329,7 @@ async def _grep(params: dict[str, Any], config: dict[str, Any]) -> str:
                 text = file_path.read_text(encoding="utf-8", errors="replace")
                 for i, line in enumerate(text.splitlines(), 1):
                     if regex.search(line):
-                        rel = (
-                            file_path.relative_to(base)
-                            if file_path.is_relative_to(base)
-                            else file_path
-                        )
+                        rel = file_path.relative_to(base) if file_path.is_relative_to(base) else file_path
                         results.append(f"{rel}:{i}: {line.strip()}")
                         if len(results) >= max_results:
                             break

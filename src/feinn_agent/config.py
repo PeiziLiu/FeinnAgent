@@ -46,6 +46,7 @@ _ENV_MAP: dict[str, str] = {
     "openai_api_key": "OPENAI_API_KEY",
     "gemini_api_key": "GEMINI_API_KEY",
     "dashscope_api_key": "DASHSCOPE_API_KEY",
+    "kimi_api_key": "KIMI_API_KEY",
     "moonshot_api_key": "MOONSHOT_API_KEY",
     "siliconflow_api_key": "SILICONFLOW_API_KEY",
     "siliconflow_base_url": "SILICONFLOW_BASE_URL",

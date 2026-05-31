@@ -15,24 +15,27 @@ from feinn_agent.providers import (
 class TestProviderDetection:
     """Test provider auto-detection from model names."""
 
-    @pytest.mark.parametrize("model,expected_provider,expected_model", [
-        ("anthropic/claude-sonnet-4", "anthropic", "claude-sonnet-4"),
-        ("claude-opus-4", "anthropic", "claude-opus-4"),
-        ("openai/gpt-4o", "openai", "gpt-4o"),
-        ("gpt-4-turbo", "openai", "gpt-4-turbo"),
-        ("o1-preview", "openai", "o1-preview"),
-        ("gemini/gemini-2.5-pro", "gemini", "gemini-2.5-pro"),
-        ("gemini-1.5-pro", "gemini", "gemini-1.5-pro"),
-        ("qwen/qwen2.5-72b", "qwen", "qwen2.5-72b"),
-        ("deepseek/deepseek-v3", "deepseek", "deepseek-v3"),
-        ("moonshot/kimi-k2", "moonshot", "kimi-k2"),
-        ("kimi-latest", "moonshot", "kimi-latest"),
-        ("ollama/llama3.2", "ollama", "llama3.2"),
-        ("vllm/Qwen2.5-72B", "vllm", "Qwen2.5-72B"),
-        ("siliconflow/Pro/zai-org/GLM-5.1", "siliconflow", "Pro/zai-org/GLM-5.1"),
-        ("lmstudio/llama-3.1", "lmstudio", "llama-3.1"),
-        ("custom/my-model", "custom", "my-model"),
-    ])
+    @pytest.mark.parametrize(
+        "model,expected_provider,expected_model",
+        [
+            ("anthropic/claude-sonnet-4", "anthropic", "claude-sonnet-4"),
+            ("claude-opus-4", "anthropic", "claude-opus-4"),
+            ("openai/gpt-4o", "openai", "gpt-4o"),
+            ("gpt-4-turbo", "openai", "gpt-4-turbo"),
+            ("o1-preview", "openai", "o1-preview"),
+            ("gemini/gemini-2.5-pro", "gemini", "gemini-2.5-pro"),
+            ("gemini-1.5-pro", "gemini", "gemini-1.5-pro"),
+            ("qwen/qwen2.5-72b", "qwen", "qwen2.5-72b"),
+            ("deepseek/deepseek-v3", "deepseek", "deepseek-v3"),
+            ("moonshot/kimi-k2", "moonshot", "kimi-k2"),
+            ("kimi-latest", "kimi", "kimi-latest"),
+            ("ollama/llama3.2", "ollama", "llama3.2"),
+            ("vllm/Qwen2.5-72B", "vllm", "Qwen2.5-72B"),
+            ("siliconflow/Pro/zai-org/GLM-5.1", "siliconflow", "Pro/zai-org/GLM-5.1"),
+            ("lmstudio/llama-3.1", "lmstudio", "llama-3.1"),
+            ("custom/my-model", "custom", "my-model"),
+        ],
+    )
     def test_provider_detection(self, model, expected_provider, expected_model):
         """Test various model name formats."""
         info = detect_provider(model)

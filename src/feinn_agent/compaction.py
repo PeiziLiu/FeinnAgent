@@ -11,6 +11,7 @@ Triggered when estimated tokens exceed config threshold (default 70%).
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from .types import AgentState, Message, Role
@@ -59,8 +60,21 @@ def get_context_limit(config: dict[str, Any]) -> int:
 # ── Public API ──────────────────────────────────────────────────────
 
 
-def maybe_compact(state: AgentState, config: dict[str, Any], *, force: bool = False) -> bool:
+def maybe_compact(
+    state: AgentState,
+    config: dict[str, Any],
+    *,
+    force: bool = False,
+    on_compact: Callable[[list[Message]], None] | None = None,
+) -> bool:
     """Check if compaction is needed and apply it.
+
+    Args:
+        state: The agent's current state (mutated in place).
+        config: Agent configuration.
+        force: If True, skip threshold check.
+        on_compact: Optional callback invoked with the list of messages
+            removed during compaction (for session store persistence).
 
     Returns True if any compaction was applied.
     """
@@ -89,7 +103,7 @@ def maybe_compact(state: AgentState, config: dict[str, Any], *, force: bool = Fa
     # Layer 2: AI summarization (placeholder — actual LLM call in async context)
     # In production, this would call an LLM to summarize old messages.
     # Here we do a simpler truncation-based approach for the sync path.
-    _compact_by_truncation(state.messages, threshold)
+    _compact_by_truncation(state.messages, threshold, on_compact=on_compact)
 
     tokens_after = estimate_tokens(state.messages)
     logger.info("After compaction: %d → %d tokens", tokens, tokens_after)
@@ -111,11 +125,7 @@ def _snip_old_tool_outputs(
     """
     # Find the boundary: don't touch the last N tool messages
     tool_msg_indices = [i for i, m in enumerate(messages) if m.role == Role.TOOL]
-    preserve_from = (
-        tool_msg_indices[-preserve_last_n]
-        if len(tool_msg_indices) > preserve_last_n
-        else len(messages)
-    )
+    preserve_from = tool_msg_indices[-preserve_last_n] if len(tool_msg_indices) > preserve_last_n else len(messages)
 
     modified = 0
     for i, msg in enumerate(messages):
@@ -137,7 +147,12 @@ def _snip_old_tool_outputs(
 # ── Layer 2: Compact (truncation fallback) ──────────────────────────
 
 
-def _compact_by_truncation(messages: list[Message], target_tokens: int) -> None:
+def _compact_by_truncation(
+    messages: list[Message],
+    target_tokens: int,
+    *,
+    on_compact: Callable[[list[Message]], None] | None = None,
+) -> None:
     """Emergency truncation: keep system + first exchange + recent messages.
 
     Replaces old middle messages with a summary marker.
@@ -152,11 +167,20 @@ def _compact_by_truncation(messages: list[Message], target_tokens: int) -> None:
     if keep_head + keep_tail >= len(messages):
         return
 
+    # Extract messages being removed before modifying the list
+    removed = messages[keep_head:-keep_tail] if keep_tail > 0 else messages[keep_head:]
+
+    # Notify callback with the removed messages
+    if on_compact and removed:
+        try:
+            on_compact(removed)
+        except Exception:
+            logger.debug("Compact callback failed (non-fatal)", exc_info=True)
+
     # Replace middle section with a compact marker
-    removed_count = len(messages) - keep_head - keep_tail
     marker = Message(
         role=Role.SYSTEM,
-        content=f"[Context compressed: {removed_count} earlier messages summarized to save space]",
+        content=f"[Context compressed: {len(removed)} earlier messages summarized to save space]",
     )
 
     messages[:] = messages[:keep_head] + [marker] + messages[-keep_tail:]

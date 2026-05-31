@@ -32,7 +32,7 @@ _PROVIDER_RULES: list[tuple[str, str]] = [
     (r"^google/", "gemini"),
     (r"^qwen", "qwen"),
     (r"^deepseek", "deepseek"),
-    (r"^kimi", "moonshot"),
+    (r"^kimi", "kimi"),
     (r"^moonshot", "moonshot"),
     (r"^siliconflow/", "siliconflow"),
     (r"^openrouter/", "openrouter"),
@@ -49,6 +49,7 @@ _CONTEXT_LIMITS: dict[str, int] = {
     "gemini": 1_000_000,
     "qwen": 1_000_000,
     "deepseek": 128_000,
+    "kimi": 128_000,
     "moonshot": 128_000,
     "siliconflow": 128_000,
     "openrouter": 200_000,
@@ -64,6 +65,7 @@ _OPENAI_COMPAT_PROVIDERS = {
     "gemini",
     "qwen",
     "deepseek",
+    "kimi",
     "moonshot",
     "siliconflow",
     "openrouter",
@@ -110,6 +112,7 @@ def get_base_url(provider: str, config: dict[str, Any]) -> str:
         "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "deepseek": "https://api.deepseek.com/v1",
         "moonshot": "https://api.moonshot.cn/v1",
+        "kimi": "https://api.kimi.com/coding/v1",
         "siliconflow": "https://api.siliconflow.cn/v1",
         "openrouter": "https://openrouter.ai/api/v1",
         "ollama": "http://localhost:11434/v1",
@@ -324,6 +327,15 @@ async def _stream_openai_compat(
                 "X-Title": "FeinnAgent",
             },
         )
+    elif info.provider == "kimi":
+        # Kimi Code API requires User-Agent identifying as a supported coding agent
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url if base_url else None,
+            default_headers={
+                "User-Agent": "KimiCLI/1.0",
+            },
+        )
     else:
         client = AsyncOpenAI(api_key=api_key, base_url=base_url if base_url else None)
     logger.debug("OpenAI client initialized")
@@ -347,6 +359,7 @@ async def _stream_openai_compat(
         logger.debug(f"Added {len(tool_schemas)} tools to request")
 
     text_parts: list[str] = []
+    reasoning_parts: list[str] = []
     tc_accum: dict[int, _OAIToolCallAccum] = {}
     input_tokens = 0
     output_tokens = 0
@@ -364,6 +377,12 @@ async def _stream_openai_compat(
 
         choice = chunk.choices[0]
         delta = choice.delta
+
+        # Capture reasoning_content (e.g. Kimi, DeepSeek R1 thinking)
+        rc = getattr(delta, "reasoning_content", None)
+        if rc:
+            reasoning_parts.append(rc)
+            yield ThinkingChunk(thinking=rc)
 
         if hasattr(delta, "content") and delta.content:
             text_parts.append(delta.content)
@@ -402,7 +421,7 @@ async def _stream_openai_compat(
     )
     yield AssistantTurn(
         text="".join(text_parts),
-        reasoning="",
+        reasoning="".join(reasoning_parts),
         tool_calls=tool_calls,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
@@ -507,6 +526,12 @@ def _to_openai_messages(messages: list[Message], system: str) -> list[dict[str, 
                     }
                     for tc in msg.tool_calls
                 ]
+            # Some providers (e.g. Kimi Code API) require reasoning_content
+            # on assistant messages with tool_calls when thinking is enabled.
+            if msg.tool_calls and not msg.reasoning:
+                d["reasoning_content"] = None
+            if msg.reasoning:
+                d["reasoning_content"] = msg.reasoning
             api_messages.append(d)
         elif msg.role == Role.TOOL:
             api_messages.append(

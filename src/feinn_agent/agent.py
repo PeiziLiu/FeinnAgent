@@ -4,6 +4,7 @@ The loop follows this structure:
 1. Append user message → check compaction → stream from LLM
 2. If tool calls: check permissions → execute (parallel when safe) → append results → loop
 3. If no tool calls: yield final response → exit
+4. After each turn: record trajectory, update nudge counters, spawn background review
 
 All state mutations go through AgentState; the loop itself is stateless.
 """
@@ -17,9 +18,11 @@ from typing import Any
 
 from .compaction import maybe_compact
 from .config import load_config
+from .learning import BackgroundReviewer, NudgeConfig, NudgeCounter
 from .permission import check_permission
 from .providers import stream as llm_stream
 from .tools.registry import dispatch_batch, tool_schemas
+from .trajectory import TrajectoryRecorder
 from .types import (
     AgentDone,
     AgentEvent,
@@ -64,6 +67,47 @@ class FeinnAgent:
         self.state = state or AgentState()
         self._permission_callback = permission_callback
 
+        # ── Learning system ──────────────────────────────────────────
+        nudge_cfg = NudgeConfig(
+            memory_nudge_interval=self.config.get("nudge", {}).get("memory_interval", 10),
+            skill_nudge_interval=self.config.get("nudge", {}).get("skill_interval", 10),
+            enabled=self.config.get("learning", {}).get("enabled", True),
+        )
+        self._nudge_counter = NudgeCounter(nudge_cfg)
+        self._background_reviewer = BackgroundReviewer(self, config or {})
+        self._trajectory_recorder: TrajectoryRecorder | None = None
+        self._session_store_instance: Any = None
+
+        # Hydrate nudge counters from existing session history
+        if self.state.turn_count > 0 or self.state.total_input_tokens > 0:
+            tool_iters = max(0, self.state.turn_count * 2)
+            self._nudge_counter.hydrate_from_history(self.state.turn_count, tool_iters)
+
+        # Lazy initialize session store for compaction hook
+        self._session_store_instance: Any = None
+
+    def _on_compact_callback(self, removed_messages: list[Any]) -> None:
+        """Callback invoked when context compaction removes messages.
+
+        Saves the removed messages to the session store so they aren't
+        lost when the in-memory context is compressed.
+        """
+        try:
+            from .learning.session_store import SessionStore
+
+            if self._session_store_instance is None:
+                self._session_store_instance = SessionStore()
+
+            for msg in removed_messages:
+                self._session_store_instance.append_message(
+                    session_id=self.state.session_id,
+                    role=msg.role.value if hasattr(msg.role, "value") else str(msg.role),
+                    content=msg.content,
+                    tokens=len(msg.content) // 4,
+                )
+        except Exception:
+            logger.debug("Compact callback failed to save messages (non-fatal)", exc_info=True)
+
     async def run(
         self,
         user_message: str,
@@ -82,7 +126,11 @@ class FeinnAgent:
             logger.debug(f"Agent iteration {iteration}/{max_iterations}")
 
             # Check compaction
-            compacted = maybe_compact(self.state, self.config)
+            compacted = maybe_compact(
+                self.state,
+                self.config,
+                on_compact=self._on_compact_callback,
+            )
             if compacted:
                 logger.info(f"Context compacted: new_size={len(self.state.messages)} messages")
 
@@ -122,7 +170,9 @@ class FeinnAgent:
 
             # No tool calls → done
             if not tool_calls:
-                logger.info(f"Agent run complete: turns={self.state.turn_count}, input_tokens={self.state.total_input_tokens}, output_tokens={self.state.total_output_tokens}")
+                logger.info(
+                    f"Agent run complete: turns={self.state.turn_count}, input_tokens={self.state.total_input_tokens}, output_tokens={self.state.total_output_tokens}"
+                )
                 yield AgentDone(
                     total_input_tokens=self.state.total_input_tokens,
                     total_output_tokens=self.state.total_output_tokens,
@@ -144,6 +194,51 @@ class FeinnAgent:
                     tool_name=tc.name,
                 )
 
+            # ── Learning system hooks ───────────────────────────────
+            # 1. Record trajectory
+            if self._trajectory_recorder:
+                self._trajectory_recorder.record_turn(
+                    turn=self.state.turn_count,
+                    user_message=user_message,
+                    assistant_response=assistant_text,
+                    tool_calls=tool_calls,
+                    tool_results=tool_results,
+                    tokens=input_tokens + output_tokens,
+                )
+
+            # 2. Record session
+            try:
+                from .learning.session_store import SessionStore
+
+                store = SessionStore()
+                store.append_message(
+                    session_id=self.state.session_id,
+                    role="assistant",
+                    content=assistant_text,
+                    tool_calls=[{"name": tc.name, "input": tc.input} for tc in tool_calls],
+                    tokens=output_tokens,
+                    model=self.config.get("model"),
+                )
+            except Exception:
+                logger.debug("Session store write failed (non-fatal)", exc_info=True)
+
+            # 3. Update nudge counters
+            self._nudge_counter.record_turn()
+            self._nudge_counter.record_tool_iterations(len(tool_calls))
+
+            # 4. Suppress skill nudge when agent uses SkillManage
+            if any(tc.name == "SkillManage" for tc in tool_calls):
+                self._nudge_counter.suppress_skill_nudge()
+
+            # 5. Spawn background review if threshold reached
+            if self._nudge_counter.should_review_any:
+                self._background_reviewer.spawn(
+                    messages_snapshot=list(self.state.messages),
+                    review_memory=self._nudge_counter.should_review_memory,
+                    review_skill=self._nudge_counter.should_review_skill,
+                )
+                self._nudge_counter.reset_all()
+
         # Max iterations reached
         logger.warning(f"Max iterations ({max_iterations}) reached, stopping")
         yield TextChunk(text="\n[Max iterations reached. Stopping.]")
@@ -155,7 +250,9 @@ class FeinnAgent:
 
     async def _stream_with_retry(self) -> AsyncIterator[TextChunk | ThinkingChunk | AssistantTurn]:
         """Stream from LLM with exponential backoff on retryable errors."""
-        logger.debug(f"Starting LLM stream with retry: model={self.config.get('model')}, messages={len(self.state.messages)}")
+        logger.debug(
+            f"Starting LLM stream with retry: model={self.config.get('model')}, messages={len(self.state.messages)}"
+        )
         for attempt in range(_MAX_RETRIES + 1):
             try:
                 async for event in llm_stream(
@@ -203,9 +300,7 @@ class FeinnAgent:
 
         logger.debug(f"Checking permissions for {len(tool_calls)} tool calls")
         for i, tc in enumerate(tool_calls):
-            allowed = await check_permission(
-                tc.name, tc.input, self.config, self._permission_callback
-            )
+            allowed = await check_permission(tc.name, tc.input, self.config, self._permission_callback)
             permission_map[i] = allowed
             if allowed:
                 permitted_batch.append((tc.name, tc.input))
@@ -215,9 +310,7 @@ class FeinnAgent:
 
         # Execute all permitted tools in batch
         logger.info(f"Executing {len(permitted_batch)}/{len(tool_calls)} permitted tools")
-        batch_results = (
-            await dispatch_batch(permitted_batch, self.config) if permitted_batch else []
-        )
+        batch_results = await dispatch_batch(permitted_batch, self.config) if permitted_batch else []
         logger.debug(f"Batch execution complete: {len(batch_results)} results")
 
         # Assemble results in order
