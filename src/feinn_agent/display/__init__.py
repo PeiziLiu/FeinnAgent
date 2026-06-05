@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import shutil
 from typing import Optional
 
 
@@ -712,6 +713,49 @@ def render_tool_card(tool_name: str, args: dict | None = None, status: str = "ru
     return f"  {emoji} {tool_name}"
 
 
+def render_tool_line(tool_name: str, args: dict | None = None, duration: float = 0.0, status: str = "completed") -> str:
+    """Render a compact Hermes-style tool output line.
+
+    Format: ``┊ {emoji} {action:9} {detail}  {duration:.1f}s``
+
+    Args:
+        tool_name: Name of the tool.
+        args: Tool arguments (first value is used as detail).
+        duration: Execution duration in seconds.
+        status: "completed" | "error" | "denied".
+
+    Returns:
+        Formatted tool line string.
+    """
+    emoji = get_tool_emoji(tool_name)
+    dur = f"{duration:.1f}s"
+    first_val = ""
+    if args:
+        first_val = next(iter(args.values()), "")
+        if isinstance(first_val, str) and len(first_val) > 42:
+            first_val = first_val[:42] + "..."
+
+    action = tool_name[:9].lower()
+
+    if status == "error":
+        return f"  ┊ {Colors.RED}{emoji} {action:9} {first_val}  {dur}{Colors.RESET}"
+    elif status == "denied":
+        return f"  ┊ {Colors.RED}{emoji} {action:9} {first_val}  {dur} {Colors.DIM}(denied){Colors.RESET}"
+    else:
+        return f"  ┊ {emoji} {action:9} {first_val}  {dur}"
+
+
+def render_response_box_header(model_name: str) -> str:
+    """Render a Hermes-style response box header.
+
+    Format: ``╭─ ⚕ model ────────────────────────────╮``
+    """
+    cols, _ = shutil.get_terminal_size()
+    label = f" ⚕ {model_name} "
+    fill = max(cols - len(label) - 2, 1)
+    return f"\n{Colors.BRIGHT_BLACK}╭─{label}{'─' * fill}╮{Colors.RESET}"
+
+
 def _format_args_summary(args: dict | None) -> str:
     """Format tool args as a one-line summary."""
     if not args:
@@ -782,3 +826,21 @@ def render_diff_summary(diff_text: str) -> str:
     if not parts:
         return f"{Colors.BRIGHT_BLACK}no changes{Colors.RESET}"
     return " | ".join(parts)
+
+
+def render_status_bar(
+    model_name: str,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    duration: int = 0,
+) -> str:
+    """Render a compact framed status bar line (no ANSI codes).
+
+    Format: ``╭─ ⚕ model │ tokens │ duration ─────────────────╮``
+    """
+    dur_str = f"{duration}s" if duration < 60 else f"{duration // 60}m{duration % 60:02d}s"
+    tokens = f"{input_tokens}↓ {output_tokens}↑"
+    label = f" ⚕ {model_name} | {tokens} | {dur_str} "
+    cols, _ = shutil.get_terminal_size()
+    fill = max(cols - len(label) - 2, 1)
+    return f"╭─{label}{'─' * fill}╮"

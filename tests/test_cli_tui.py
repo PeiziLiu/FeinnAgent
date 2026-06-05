@@ -199,6 +199,96 @@ class TestFeinnTUISafeOutput:
             tui._safe_output("")
             mock_print.assert_called_once_with("\n")
 
+    def _make_bg_thread(self):
+        """Simulate being in a background thread by returning a non-main thread."""
+        t = threading.Thread(target=lambda: None)
+        return patch.object(threading, "current_thread", return_value=t)
+
+    def test_streaming_chunks_accumulate(self, mock_pt):
+        """Streaming chunks (end="") accumulate in buffer, not flushed per-call."""
+        tui = FeinnTUI({"model": "test"})
+        mock_app = MagicMock()
+        mock_app._is_running = True
+        tui._app = mock_app
+
+        with self._make_bg_thread(), patch.object(tui, "_raw_print") as mock_print:
+            tui._safe_output("你好", end="")
+            tui._safe_output("世界", end="")
+            # No raw_print called — text is buffered
+            mock_print.assert_not_called()
+            # Accumulator has the text
+            assert tui._output_accumulator == "你好世界"
+
+    def test_streaming_schedules_one_flush(self, mock_pt):
+        """First streaming chunk schedules flush; subsequent chunks don't."""
+        tui = FeinnTUI({"model": "test"})
+        mock_app = MagicMock()
+        mock_app._is_running = True
+        tui._app = mock_app
+
+        with self._make_bg_thread():
+            tui._safe_output("chunk1", end="")
+            assert mock_app.loop.call_soon_threadsafe.call_count == 1
+
+            tui._safe_output("chunk2", end="")
+            # No additional schedule
+            assert mock_app.loop.call_soon_threadsafe.call_count == 1
+
+    def test_complete_line_flushes_immediately(self, mock_pt):
+        """Complete lines (end='\\n') schedule a flush."""
+        tui = FeinnTUI({"model": "test"})
+        mock_app = MagicMock()
+        mock_app._is_running = True
+        tui._app = mock_app
+
+        with self._make_bg_thread():
+            tui._safe_output("hello\nworld", end="\n")
+            # Flush scheduled via loop.call_soon_threadsafe
+            assert mock_app.loop.call_soon_threadsafe.call_count == 1
+            # No raw_print (everything goes through _flush_output → print)
+            assert tui._output_accumulator == "hello\nworld\n"
+
+    def test_flush_output_sends_accumulated_text(self, mock_pt):
+        """_flush_output sends buffered text via print()."""
+        tui = FeinnTUI({"model": "test"})
+        tui._output_accumulator = "你好世界"
+        tui._flush_pending = True
+
+        with patch("builtins.print") as mock_print:
+            tui._flush_output()
+
+        mock_print.assert_called_once_with("你好世界", end="", flush=True)
+        assert tui._output_accumulator == ""
+        assert tui._flush_pending is False
+
+    def test_flush_output_empty_noop(self, mock_pt):
+        """_flush_output with empty buffer is a no-op."""
+        tui = FeinnTUI({"model": "test"})
+        with patch("builtins.print") as mock_print:
+            tui._flush_output()
+            mock_print.assert_not_called()
+
+    def test_interleaved_streaming_and_lines(self, mock_pt):
+        """Streaming chunks + complete lines: all buffered, line triggers flush."""
+        tui = FeinnTUI({"model": "test"})
+        mock_app = MagicMock()
+        mock_app._is_running = True
+        tui._app = mock_app
+
+        with self._make_bg_thread():
+            tui._safe_output("stream", end="")
+            tui._safe_output("ing", end="")
+            tui._safe_output("line1", end="\n")
+            tui._safe_output("more_stream", end="")
+
+        # All text accumulated (including end chars)
+        assert "stream" in tui._output_accumulator
+        assert "ing" in tui._output_accumulator
+        assert "line1\n" in tui._output_accumulator
+        assert "more_stream" in tui._output_accumulator
+        # flush scheduled at least once (on first chunk + on line)
+        assert mock_app.loop.call_soon_threadsafe.call_count >= 1
+
 
 class TestFeinnTUIHandleCommand:
     def test_quit(self, mock_pt):

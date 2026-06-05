@@ -28,7 +28,7 @@ from .display import (
     SpinnerEngine,
     render_diff_summary,
     render_diff_text,
-    render_tool_card,
+    render_tool_line,
 )
 from .types import (
     AgentDone,
@@ -52,6 +52,7 @@ _CLEAR_LINE = "\r" + " " * 100 + "\r"
 def _import_pt():
     """Import prompt_toolkit symbols lazily. Returns module or None."""
     try:
+        from prompt_toolkit.patch_stdout import patch_stdout
         from prompt_toolkit import print_formatted_text as _pt_print
         from prompt_toolkit.application import Application
         from prompt_toolkit.formatted_text import ANSI as _PT_ANSI
@@ -64,6 +65,7 @@ def _import_pt():
         from prompt_toolkit.history import FileHistory
 
         return {
+            "patch_stdout": patch_stdout,
             "print_formatted_text": _pt_print,
             "Application": Application,
             "ANSI": _PT_ANSI,
@@ -113,7 +115,10 @@ class FeinnTUI:
         self._spinner_running = False
         self._spinner_thread: threading.Thread | None = None
         self._tool_start_time: float = 0.0
+        self._tool_state: dict[str, dict] = {}
         self._thinking_mode = False
+        self._response_box_open = False
+        self._response_md_buffer: str = ""
 
         # ── Status bar state ─────────────────────────────────────
         self._session_start = time.time()
@@ -147,6 +152,7 @@ class FeinnTUI:
         self._output_accumulator: str = ""
         self._output_lock = threading.Lock()
         self._flush_pending = False
+        self._last_flush_time = time.time()
 
         # ── Externally set callbacks ─────────────────────────────
         self._on_exit: Callable[[], None] | None = None
@@ -177,7 +183,8 @@ class FeinnTUI:
             self._run_one_shot(prompt)
         else:
             self._banner()
-            app.run()
+            with self._pt["patch_stdout"](app):
+                app.run()
 
         self._join_threads()
 
@@ -243,7 +250,7 @@ class FeinnTUI:
         self._approval_panel = pt["ConditionalContainer"](
             content=pt["Window"](
                 content=pt["FormattedTextControl"](self._get_approval_fragments),
-                height=6,
+                height=self._get_approval_height(),
                 dont_extend_height=True,
             ),
             filter=pt["Condition"](lambda: self._approval_state is not None),
@@ -344,6 +351,12 @@ class FeinnTUI:
                 self._invalidate()
                 self._safe_output(f"{Colors.GREEN}→ {tool_name} allowed for this session{Colors.RESET}")
 
+        @kb.add("c-c", filter=pt["Condition"](self._is_agent_running))
+        def _interrupt_agent(event: Any) -> None:
+            """Ctrl+C during agent execution: interrupt and return to prompt."""
+            self._safe_output(f"{Colors.YELLOW}⏹  Interrupting...{Colors.RESET}")
+            self.stop()
+
         return kb
 
     def _is_input_mode(self) -> bool:
@@ -351,6 +364,9 @@ class FeinnTUI:
 
     def _is_approval_mode(self) -> bool:
         return self._approval_state is not None
+
+    def _is_agent_running(self) -> bool:
+        return self._agent_running
 
     # ── Style ──────────────────────────────────────────────────────
 
@@ -360,6 +376,7 @@ class FeinnTUI:
                 "input-area": "bg:#1a1a2e #e0e0e0",
                 "input-rule": "bg:#1a1a2e #4a4a6a",
                 "status-bar": "bg:#1a1a2e #c0c0c0",
+                "status-bar.text": "bg:#1a1a2e #888888",
                 "spinner": "bg:#1a1a2e #87CEEB",
                 "approval-border": "#CD7F32",
                 "approval-title": "#FF8C00 bold",
@@ -383,6 +400,26 @@ class FeinnTUI:
         print(welcome)
 
     # ── Input submission ───────────────────────────────────────────
+
+    def _flush_md_buffer(self) -> None:
+        """Render accumulated markdown buffer through rich and flush to output."""
+        if not self._response_md_buffer:
+            return
+        text = self._response_md_buffer
+        self._response_md_buffer = ""
+        try:
+            from io import StringIO
+            from rich.console import Console
+            from rich.markdown import Markdown
+
+            buf = StringIO()
+            console = Console(file=buf, width=80, highlight=False, color_system="truecolor")
+            console.print(Markdown(text.strip()))
+            rendered = buf.getvalue()
+            if rendered.strip():
+                self._safe_output(f"\n{rendered}")
+        except Exception:
+            self._safe_output(text)
 
     def _on_submit(self, user_input: str) -> None:
         user_input = user_input.strip()
@@ -494,20 +531,54 @@ class FeinnTUI:
                     self._invalidate()
 
                 elif isinstance(event, TextChunk):
+                    if not self._response_box_open:
+                        from .display import render_response_box_header
+
+                        self._safe_output(render_response_box_header(self._model_name))
+                        self._response_box_open = True
                     self._spinner_text = ""
-                    self._safe_output(event.text, end="")
+                    # Accumulate for markdown rendering; flush on paragraph breaks
+                    self._response_md_buffer += event.text
+                    while "\n\n" in self._response_md_buffer:
+                        parts = self._response_md_buffer.split("\n\n", 1)
+                        self._response_md_buffer = parts[1]
+                        completed = parts[0].strip()
+                        if completed:
+                            try:
+                                from io import StringIO
+                                from rich.console import Console
+                                from rich.markdown import Markdown
+
+                                buf = StringIO()
+                                console = Console(file=buf, width=80, highlight=False, color_system="truecolor")
+                                console.print(Markdown(completed))
+                                rendered = buf.getvalue()
+                                self._safe_output(rendered)
+                            except Exception:
+                                self._safe_output(completed + "\n")
 
                 elif isinstance(event, ToolStart):
-                    self._safe_output(render_tool_card(event.name, event.inputs, "running"))
+                    # Flush any pending markdown text before tool output
+                    if self._response_md_buffer:
+                        self._flush_md_buffer()
+                    self._tool_state[event.name] = {
+                        "time": time.time(),
+                        "inputs": event.inputs,
+                    }
                     self._spinner_text = f"Running {event.name}..."
                     self._thinking_mode = False
                     self._tool_start_time = time.time()
                     self._invalidate()
 
                 elif isinstance(event, ToolEnd):
-                    status = "success" if event.permitted else "error"
-                    self._safe_output(render_tool_card(event.name, status=status))
-                    self._spinner_text = f"Finished {event.name}"
+                    from .display import render_tool_line
+
+                    stored = self._tool_state.pop(event.name, {})
+                    start = stored.get("time", 0.0) or 0.0
+                    duration = time.time() - start if start else 0.0
+                    tool_status = "success" if event.permitted else "denied"
+                    self._safe_output(render_tool_line(event.name, stored.get("inputs"), duration, tool_status))
+                    self._spinner_text = ""
                     self._invalidate()
 
                     if event.name in ("Write", "Edit") and event.permitted and event.result:
@@ -522,6 +593,8 @@ class FeinnTUI:
                     self._spinner_text = ""
 
                 elif isinstance(event, AgentDone):
+                    # Flush any remaining markdown text
+                    self._flush_md_buffer()
                     self._total_input_tokens = event.total_input_tokens
                     self._total_output_tokens = event.total_output_tokens
                     self._spinner_text = ""
@@ -567,32 +640,53 @@ class FeinnTUI:
         self._banner()
         self._start_agent(prompt)
         try:
-            self._app.run()
+            with self._pt["patch_stdout"](self._app):
+                self._app.run()
         except KeyboardInterrupt:
             self._interrupt_requested = True
 
     # ── Spinner loop (background thread) ───────────────────────────
 
     def _spinner_loop(self) -> None:
-        """Periodically invalidate the app to animate spinner."""
+        """Periodically invalidate the app & flush buffered output."""
         while self._spinner_running:
             time.sleep(0.1)
             self._invalidate()
-        # Final invalidate to clear spinner
+            self._maybe_flush_buffered()
         self._invalidate()
+        self._flush_output()
+
+    def _maybe_flush_buffered(self) -> None:
+        """Flush buffered output if it has been sitting >500 ms."""
+        if not self._output_accumulator:
+            return
+        if time.time() - self._last_flush_time < 0.5:
+            return
+        self._last_flush_time = time.time()
+        app = self._app
+        if app is None:
+            return
+        try:
+            app.loop.call_soon_threadsafe(self._flush_output)
+        except Exception:
+            pass
 
     # ── Thread-safe output ─────────────────────────────────────────
 
     def _safe_output(self, text: str, end: str = "\n") -> None:
         """Print text safely from any thread.
 
-        *Streaming chunks (end=""):* accumulated in ``_output_accumulator``
-        and flushed to the terminal (via ``run_in_terminal``) in a single
-        batch on the main event loop.  This avoids per-chunk
-        hide/redraw/show cycles that corrupt formatting (e.g. markdown
-        tables with ``|`` characters).
+        **Every** cross-thread output goes through ``run_in_terminal``
+        — never ``print()`` directly — so the Application's screen state
+        stays consistent (no spinner chrome leaking into the scrollback,
+        no cursor-pos corruption).
 
-        *Complete lines (end="\n"):* flushed immediately.
+        *Streaming chunks (end=""):* accumulated in ``_output_accumulator``
+        and flushed in a single ``run_in_terminal`` batch.
+
+        *Complete lines (end="\n"):* also aggregated but *always*
+        trigger an immediate flush so tool-card lines appear without
+        waiting for the next streaming chunk.
         """
         app = self._app
         is_main = threading.current_thread() is threading.main_thread()
@@ -602,26 +696,29 @@ class FeinnTUI:
             self._raw_print(text + (end or ""))
             return
 
-        # Cross-thread output → buffer and schedule a single flush
-        if end == "\n":
-            self._raw_print(text + "\n")
-            return
-
+        # Cross-thread: accumulate text + end, schedule one flush
         with self._output_lock:
-            self._output_accumulator += text
-            if self._flush_pending:
-                return
-            self._flush_pending = True
+            self._output_accumulator += text + (end or "")
+            need_schedule = end == "\n" or not self._flush_pending
+            if need_schedule:
+                self._flush_pending = True
 
-        try:
-            app.loop.call_soon_threadsafe(self._flush_output)
-        except Exception:
-            with self._output_lock:
-                self._flush_pending = False
-            self._raw_print(text)
+        if need_schedule:
+            try:
+                app.loop.call_soon_threadsafe(self._flush_output)
+            except Exception:
+                with self._output_lock:
+                    self._flush_pending = False
+                self._raw_print(text + (end or ""))
 
     def _flush_output(self) -> None:
-        """Flush accumulated output via run_in_terminal on the main thread."""
+        """Flush accumulated output.
+
+        With ``patch_stdout=True`` on the Application, ``print()`` from
+        any thread automatically routes through ``StdoutProxy`` which
+        writes above the chrome — no ``run_in_terminal`` needed, and
+        no risk of interleaving with spinner redraws.
+        """
         with self._output_lock:
             text = self._output_accumulator
             self._output_accumulator = ""
@@ -630,15 +727,8 @@ class FeinnTUI:
         if not text:
             return
 
-        try:
-            from prompt_toolkit.application import run_in_terminal
-            from prompt_toolkit import print_formatted_text as _pt_print
-            from prompt_toolkit.formatted_text import ANSI as _PT_ANSI
-            from prompt_toolkit.formatted_text import to_formatted_text
-
-            run_in_terminal(lambda: _pt_print(_PT_ANSI(text), end=""))
-        except Exception:
-            print(text, end="", flush=True)
+        self._last_flush_time = time.time()
+        print(text, end="", flush=True)
 
     def _raw_print(self, text: str) -> None:
         """Direct print fallback."""
@@ -687,17 +777,23 @@ class FeinnTUI:
         if not self._status_bar_visible:
             return []
 
-        duration = int(time.time() - self._session_start)
-        if duration < 60:
-            duration_str = f"{duration}s"
-        elif duration < 3600:
-            duration_str = f"{duration // 60}m{duration % 60:02d}s"
-        else:
-            duration_str = f"{duration // 3600}h{(duration % 3600) // 60:02d}m"
+        from .display import render_status_bar
 
-        tokens = f"{self._total_input_tokens}↓ {self._total_output_tokens}↑"
-        text = f"⚕ {self._model_name} | {tokens} | {duration_str}"
-        return [("class:status-bar", f" {text} ")]
+        duration = int(time.time() - self._session_start)
+        text = render_status_bar(
+            self._model_name,
+            self._total_input_tokens,
+            self._total_output_tokens,
+            duration,
+        )
+        return [("class:status-bar.text", f" {text} ")]
+
+    def _get_approval_height(self) -> int:
+        """Dynamic approval panel height based on the number of arguments."""
+        if self._approval_state is None:
+            return 0
+        n = len(self._approval_state.get("request", object()).inputs or {})
+        return min(n + 5, 20)
 
     def _get_approval_fragments(self) -> list[tuple[str, str]]:
         """Return styled fragments for the approval panel."""

@@ -241,7 +241,7 @@ def _make_permission_callback(config: dict[str, Any]) -> Any:
 
 # ── Spinner background task ──────────────────────────────────────────
 
-_CLEAR_LINE = "\r" + " " * 100 + "\r"
+_CLEAR_LINE = "\033[2K\r"
 
 
 async def _run_spinner(spinner: SpinnerEngine, start_time: float, message: str = "") -> None:

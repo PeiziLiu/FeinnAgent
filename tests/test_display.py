@@ -1,13 +1,15 @@
 """Tests for display module — SpinnerEngine, tool cards, diff rendering."""
 
-
 from feinn_agent.display import (
     Colors,
     SpinnerEngine,
     get_tool_emoji,
     render_diff_summary,
     render_diff_text,
+    render_response_box_header,
+    render_status_bar,
     render_tool_card,
+    render_tool_line,
 )
 
 
@@ -133,3 +135,76 @@ class TestRenderDiffSummary:
     def test_no_changes(self):
         result = render_diff_summary("context\nno changes\n")
         assert "no changes" in result or (Colors.BRIGHT_BLACK in result)
+
+
+class TestRenderToolLine:
+    def test_success_format(self):
+        result = render_tool_line("Bash", {"command": "ls -la"}, 0.3, "success")
+        assert "┊" in result
+        assert "⚡" in result
+        assert "bash" in result
+        assert "ls -la" in result
+        assert "0.3s" in result
+
+    def test_error_format(self):
+        result = render_tool_line("Bash", {"command": "rm /"}, 0.5, "error")
+        assert "┊" in result
+        assert "0.5s" in result
+        assert Colors.RED in result
+
+    def test_denied_format(self):
+        result = render_tool_line("Write", {"path": "/etc"}, 0.2, "denied")
+        assert "┊" in result
+        assert "denied" in result
+        assert Colors.RED in result or Colors.DIM in result
+
+    def test_long_arg_truncation(self):
+        result = render_tool_line("Read", {"file_path": "x" * 100}, 0.1, "success")
+        assert "..." in result
+
+    def test_read_tool(self):
+        result = render_tool_line("Read", {"file_path": "src/main.py"}, 0.4, "success")
+        assert "┊" in result
+        assert "📖" in result
+        assert "read" in result
+        assert "src/main.py" in result
+        assert "0.4s" in result
+
+    def test_glob_tool(self):
+        result = render_tool_line("Glob", {"pattern": "**/*.py"}, 0.05, "success")
+        assert "┊" in result
+        assert "🔍" in result
+        assert "0.1s" in result
+
+
+class TestRenderResponseBoxHeader:
+    def test_header_format(self):
+        result = render_response_box_header("test-model")
+        assert "╭─" in result
+        assert "⚕" in result
+        assert "test-model" in result
+        assert "╮" in result
+
+    def test_header_colored(self):
+        result = render_response_box_header("model")
+        assert Colors.BRIGHT_BLACK in result
+
+
+class TestRenderStatusBar:
+    def test_basic_format(self):
+        result = render_status_bar("test-model", 100, 20, 65)
+        assert "╭─" in result
+        assert "⚕" in result
+        assert "100↓" in result
+        assert "20↑" in result
+        assert "1m05s" in result
+        assert "╮" in result
+
+    def test_short_duration(self):
+        result = render_status_bar("m", 0, 0, 5)
+        assert "5s" in result
+
+    def test_colored(self):
+        result = render_status_bar("m", 0, 0, 0)
+        assert "╭─" in result
+        assert "╮" in result
