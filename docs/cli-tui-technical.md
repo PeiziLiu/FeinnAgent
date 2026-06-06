@@ -1,5 +1,7 @@
 # CLI TUI Enhancement — Technical Design Document
 
+> Status: **Implemented** (src/feinn_agent/cli.py, src/feinn_agent/cli_tui.py, src/feinn_agent/display/)
+
 ## 1. Architecture Overview
 
 ```

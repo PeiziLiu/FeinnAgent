@@ -1,5 +1,7 @@
 # FeinnAgent Browser Automation Technical Implementation
 
+> Status: **Implemented** (src/feinn_agent/tools/browser.py + src/feinn_agent/tools/browser_providers/)
+
 ## 1. Architecture Overview
 
 ### 1.1 High-Level Architecture

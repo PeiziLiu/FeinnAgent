@@ -51,11 +51,11 @@ git clone https://github.com/PeiziLiu/FeinnAgent.git
 cd feinn-agent
 
 # 2. 创建虚拟环境
-python3.11 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
 # 3. 安装依赖
-python3.11 -m pip install -e .
+python3 -m pip install -e .
 
 # 4. 配置环境变量
 cp .env.example .env
@@ -426,23 +426,23 @@ param-names: ["filename"]
 
 ```bash
 # 运行所有测试
-python3.11 -m pytest tests/ -v
+python3 -m pytest tests/ -v
 
 # 带覆盖率
-python3.11 -m pytest tests/ --cov=src/feinn_agent --cov-report=term-missing
+python3 -m pytest tests/ --cov=src/feinn_agent --cov-report=term-missing
 
 # 跳过集成测试
-python3.11 -m pytest tests/ -m "not integration"
+python3 -m pytest tests/ -m "not integration"
 ```
 
 ### 代码检查
 
 ```bash
 # 格式化代码
-python3.11 -m ruff format src/
+python3 -m ruff format src/
 
 # 检查并修复
-python3.11 -m ruff check src/ --fix
+python3 -m ruff check src/ --fix
 ```
 
 ### 添加新工具

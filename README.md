@@ -69,11 +69,11 @@ git clone https://github.com/PeiziLiu/FeinnAgent.git
 cd feinn-agent
 
 # 2. Create virtual environment
-python3.11 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
 # 3. Install dependencies
-python3.11 -m pip install -e .
+python3 -m pip install -e .
 
 # 4. Configure environment variables
 cp .env.example .env
@@ -444,23 +444,23 @@ Context: $PARAMS
 
 ```bash
 # Run all tests
-python3.11 -m pytest tests/ -v
+python3 -m pytest tests/ -v
 
 # Run with coverage
-python3.11 -m pytest tests/ --cov=src/feinn_agent --cov-report=term-missing
+python3 -m pytest tests/ --cov=src/feinn_agent --cov-report=term-missing
 
 # Run without integration tests
-python3.11 -m pytest tests/ -m "not integration"
+python3 -m pytest tests/ -m "not integration"
 ```
 
 ### Code Quality
 
 ```bash
 # Format code
-python3.11 -m ruff format src/
+python3 -m ruff format src/
 
 # Check and fix
-python3.11 -m ruff check src/ --fix
+python3 -m ruff check src/ --fix
 ```
 
 ### Adding New Tools

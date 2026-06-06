@@ -1,5 +1,7 @@
 # CLI Enhancement — Requirements Document
 
+> Status: **Implemented** (src/feinn_agent/cli.py, src/feinn_agent/cli_tui.py, src/feinn_agent/display/)
+
 ## Harness Engineering Framework
 
 ### Guide (前置引导)

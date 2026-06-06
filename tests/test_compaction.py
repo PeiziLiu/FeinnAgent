@@ -1,12 +1,13 @@
 """Tests for context compaction."""
 
+import unittest
 import pytest
 from feinn_agent.compaction import (
     estimate_tokens,
     _snip_old_tool_outputs,
     maybe_compact,
 )
-from feinn_agent.types import Message, Role
+from feinn_agent.types import AgentState, Message, Role
 
 
 class TestEstimateTokens:
@@ -42,6 +43,7 @@ class TestEstimateTokens:
     def test_message_with_tool_calls(self):
         """Test estimation with tool calls."""
         from feinn_agent.types import ToolCall
+
         tc = ToolCall(id="1", name="Read", input={"file_path": "/tmp/test.txt"})
         msgs = [
             Message(role=Role.ASSISTANT, content="", tool_calls=[tc]),
@@ -113,38 +115,35 @@ class TestMaybeCompact:
         """Test no compaction when under threshold."""
         config = {"compaction_threshold": 0.8, "compaction_preserve_last_n": 6}
 
-        # Create messages that are well under threshold
-        msgs = [Message(role=Role.USER, content="short")]
+        state = AgentState()
+        state.add_message(Role.USER, content="short")
 
-        # Mock estimate_tokens to return low value
-        with pytest.mock.patch("feinn_agent.compaction.estimate_tokens", return_value=100):
-            with pytest.mock.patch("feinn_agent.compaction._snip_old_tool_outputs") as mock_snip:
-                maybe_compact(msgs, config, context_limit=10000)
-                # Should not call snip
-                mock_snip.assert_not_called()
+        # Mock estimate_tokens to return low value and get_context_limit to return large
+        with unittest.mock.patch("feinn_agent.compaction.estimate_tokens", return_value=10):
+            with unittest.mock.patch("feinn_agent.compaction.get_context_limit", return_value=100000):
+                result = maybe_compact(state, config)
+                assert result is False
 
     def test_compact_when_over_threshold(self):
         """Test compaction when over threshold."""
-        config = {"compaction_threshold": 0.5, "compaction_preserve_last_n": 6}
+        config = {"compaction_threshold": 0.3, "compaction_preserve_last_n": 2, "max_tool_output_chars": 32000}
 
-        msgs = [Message(role=Role.USER, content="x" * 1000)]
+        state = AgentState()
+        state.add_message(Role.USER, content="x" * 1000)
 
-        # Mock to simulate being over threshold
-        with pytest.mock.patch("feinn_agent.compaction.estimate_tokens", return_value=6000):
-            with pytest.mock.patch("feinn_agent.compaction._snip_old_tool_outputs") as mock_snip:
-                mock_snip.return_value = 1
-                maybe_compact(msgs, config, context_limit=10000)
-                # Should call snip
-                mock_snip.assert_called_once()
+        with unittest.mock.patch("feinn_agent.compaction.estimate_tokens", return_value=100):
+            with unittest.mock.patch("feinn_agent.compaction.get_context_limit", return_value=100):
+                result = maybe_compact(state, config)
+                assert result is True
 
     def test_force_compact(self):
         """Test forced compaction."""
-        config = {"compaction_threshold": 0.9, "compaction_preserve_last_n": 6}
+        config = {"compaction_threshold": 0.9, "compaction_preserve_last_n": 2, "max_tool_output_chars": 32000}
 
-        msgs = [Message(role=Role.USER, content="short")]
+        state = AgentState()
+        state.add_message(Role.USER, content="short")
 
-        with pytest.mock.patch("feinn_agent.compaction._snip_old_tool_outputs") as mock_snip:
-            mock_snip.return_value = 0
-            maybe_compact(msgs, config, force=True)
-            # Should call snip even when under threshold
-            mock_snip.assert_called_once()
+        with unittest.mock.patch("feinn_agent.compaction.estimate_tokens", return_value=10):
+            with unittest.mock.patch("feinn_agent.compaction.get_context_limit", return_value=100000):
+                result = maybe_compact(state, config, force=True)
+                assert result is True

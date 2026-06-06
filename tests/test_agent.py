@@ -3,12 +3,14 @@
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch, Mock
+from feinn_agent.tools.registry import dispatch as real_dispatch
 
 from feinn_agent.agent import FeinnAgent
 from feinn_agent.types import (
     AgentState,
     AgentDone,
     AgentEvent,
+    AssistantTurn,
     Message,
     PermissionMode,
     Role,
@@ -58,6 +60,7 @@ class TestAgentRun:
     @pytest.fixture
     def mock_stream(self):
         """Mock the LLM stream."""
+
         async def mock_stream_impl(*args, **kwargs):
             yield TextChunk(text="Hello!")
             yield AssistantTurn(
@@ -74,10 +77,7 @@ class TestAgentRun:
     @pytest.mark.asyncio
     async def test_simple_run(self, mock_stream):
         """Test simple agent run without tools."""
-        agent = FeinnAgent(
-            config={"model": "openai/gpt-4o", "max_iterations": 10},
-            system_prompt="You are helpful"
-        )
+        agent = FeinnAgent(config={"model": "openai/gpt-4o", "max_iterations": 10}, system_prompt="You are helpful")
 
         events = []
         async for event in agent.run("Hi"):
@@ -120,7 +120,7 @@ class TestAgentWithTools:
         """Test agent handles tool calls correctly."""
         tool_call = ToolCall(id="call_1", name="Read", input={"file_path": "/tmp/test.txt"})
 
-        async def mock_stream_with_tools(*args, **kwargs):
+        async def _mock_stream(*args, **kwargs):
             yield TextChunk(text="I'll read that file")
             yield AssistantTurn(
                 text="I'll read that file",
@@ -130,28 +130,30 @@ class TestAgentWithTools:
                 output_tokens=10,
             )
 
-        with patch("feinn_agent.agent.llm_stream", side_effect=mock_stream_with_tools):
-            with patch("feinn_agent.agent.dispatch", return_value="file contents"):
-                agent = FeinnAgent(
-                    config={
-                        "model": "openai/gpt-4o",
-                        "max_iterations": 10,
-                        "permission_mode": PermissionMode.ACCEPT_ALL.value,
-                    }
-                )
+        with patch("feinn_agent.agent.llm_stream", side_effect=_mock_stream):
+            with patch("feinn_agent.permission.check_permission", return_value=True):
+                with patch("feinn_agent.tools.registry.dispatch_batch", return_value=["File content"]):
+                    agent = FeinnAgent(
+                        config={
+                            "model": "openai/gpt-4o",
+                            "max_iterations": 10,
+                            "permission_mode": PermissionMode.ACCEPT_ALL.value,
+                        }
+                    )
 
-                events = []
-                async for event in agent.run("Read the file"):
-                    events.append(event)
+                    events = []
+                    async for event in agent.run("Read the file"):
+                        events.append(event)
 
-                # Check that tool result was added to messages
-                tool_messages = [m for m in agent.state.messages if m.role == Role.TOOL]
-                assert len(tool_messages) > 0
+                    # Check that tool result was added to messages
+                    tool_messages = [m for m in agent.state.messages if m.role == Role.TOOL]
+                    assert len(tool_messages) > 0
 
     @pytest.mark.asyncio
     async def test_max_iterations_limit(self):
         """Test agent respects max_iterations."""
-        async def mock_stream_always_tools(*args, **kwargs):
+
+        async def _mock_stream(*args, **kwargs):
             yield AssistantTurn(
                 text="",
                 reasoning="",
@@ -160,22 +162,23 @@ class TestAgentWithTools:
                 output_tokens=5,
             )
 
-        with patch("feinn_agent.agent.llm_stream", side_effect=mock_stream_always_tools):
-            with patch("feinn_agent.agent.dispatch", return_value="result"):
-                agent = FeinnAgent(
-                    config={
-                        "model": "openai/gpt-4o",
-                        "max_iterations": 3,
-                        "permission_mode": PermissionMode.ACCEPT_ALL.value,
-                    }
-                )
+        with patch("feinn_agent.agent.llm_stream", return_value=_mock_stream()):
+            with patch("feinn_agent.tools.registry.dispatch_batch", return_value=["result"]):
+                with patch("feinn_agent.permission.check_permission", return_value=True):
+                    agent = FeinnAgent(
+                        config={
+                            "model": "openai/gpt-4o",
+                            "max_iterations": 3,
+                            "permission_mode": PermissionMode.ACCEPT_ALL.value,
+                        }
+                    )
 
-                events = []
-                async for event in agent.run("Trigger tools"):
-                    events.append(event)
+                    events = []
+                    async for event in agent.run("Trigger tools"):
+                        events.append(event)
 
-                # Should stop after max_iterations
-                assert agent.state.turn_count <= 3
+                    # Should stop after max_iterations
+                    assert agent.state.turn_count <= 3
 
 
 class TestAgentStateManagement:
@@ -184,7 +187,8 @@ class TestAgentStateManagement:
     @pytest.mark.asyncio
     async def test_token_tracking(self):
         """Test agent tracks token usage."""
-        async def mock_stream(*args, **kwargs):
+
+        async def _mock_stream(*args, **kwargs):
             yield AssistantTurn(
                 text="Response",
                 reasoning="",
@@ -193,7 +197,7 @@ class TestAgentStateManagement:
                 output_tokens=50,
             )
 
-        with patch("feinn_agent.agent.llm_stream", side_effect=mock_stream):
+        with patch("feinn_agent.agent.llm_stream", side_effect=_mock_stream):
             agent = FeinnAgent(config={"model": "openai/gpt-4o", "max_iterations": 10})
 
             async for _ in agent.run("Test"):
@@ -205,6 +209,7 @@ class TestAgentStateManagement:
     @pytest.mark.asyncio
     async def test_turn_count_increment(self):
         """Test turn count increments correctly."""
+
         async def mock_stream(*args, **kwargs):
             yield AssistantTurn(
                 text="Response",
@@ -227,6 +232,7 @@ class TestAgentStateManagement:
     @pytest.mark.asyncio
     async def test_message_history_preserved(self):
         """Test message history is preserved across runs."""
+
         async def mock_stream(*args, **kwargs):
             yield AssistantTurn(
                 text="Response",
@@ -284,6 +290,7 @@ class TestAgentRetryLogic:
     @pytest.mark.asyncio
     async def test_no_retry_on_fatal_error(self):
         """Test agent doesn't retry on fatal errors."""
+
         async def mock_stream_fatal(*args, **kwargs):
             raise ValueError("Invalid API key")
 
@@ -296,13 +303,3 @@ class TestAgentRetryLogic:
 
             # Should get error message and stop
             assert any(isinstance(e, TextChunk) and "Error" in e.text for e in events)
-
-
-# Helper class for mocking
-class AssistantTurn:
-    def __init__(self, text, reasoning, tool_calls, input_tokens, output_tokens):
-        self.text = text
-        self.reasoning = reasoning
-        self.tool_calls = tool_calls
-        self.input_tokens = input_tokens
-        self.output_tokens = output_tokens

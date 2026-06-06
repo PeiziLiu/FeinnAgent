@@ -1,1152 +1,553 @@
-# FeinnAgent Detailed Technical Design Document
+# FeinnAgent Technical Reference
+
+> Auto-generated from source code. Last updated: 2026-06-06
+
+---
 
 ## 1. Technology Stack
 
-### 1.1 Core Dependencies
+### 1.1 Runtime
 
 | Component | Version | Purpose |
 |-----------|---------|---------|
-| Python | 3.10+ | Runtime |
-| asyncio | Built-in | Async concurrency |
-| Pydantic | 2.0+ | Data validation |
-| FastAPI | 0.115+ | API framework |
-| uvicorn | 0.32+ | ASGI server |
-| aiohttp | 3.10+ | HTTP client |
-| SQLAlchemy | 2.0+ | ORM |
-| aiosqlite | 0.20+ | Async SQLite |
-| Click | 8.0+ | CLI framework |
-| Rich | 13.0+ | Terminal UI |
-| tiktoken | 0.8+ | Token counting |
-| tenacity | 9.0+ | Retry mechanism |
+| Python | >=3.11 | Runtime (uses `from __future__ import annotations`, StrEnum backport) |
+| asyncio | built-in | Async concurrency for agent loop, tool dispatch, LLM streaming |
+| httpx | >=0.27 | Async HTTP (used by WebFetch tool) |
 
-### 1.2 Development Dependencies
+### 1.2 LLM SDKs
+
+| SDK | Version | Provider |
+|-----|---------|----------|
+| anthropic | >=0.42 | Anthropic Claude (native streaming + thinking) |
+| openai | >=1.50 | OpenAI + 13 compatible providers (Gemini, DeepSeek, Qwen, etc.) |
+
+### 1.3 CLI & Server
 
 | Component | Version | Purpose |
 |-----------|---------|---------|
-| pytest | 8.0+ | Testing framework |
-| pytest-asyncio | 0.24+ | Async testing |
-| pytest-cov | 6.0+ | Coverage |
-| ruff | 0.8+ | Linting |
-| mypy | 1.13+ | Type checking |
-| pre-commit | 4.0+ | Git hooks |
+| click | >=8.1 | CLI argument parsing and command routing |
+| prompt-toolkit | >=3.0 | Interactive REPL with multi-line, tab-completion, history |
+| rich | >=13.9 | Terminal ANSI rendering (spinners, progress, formatting) |
+| fastapi | >=0.115 | REST API framework |
+| uvicorn | >=0.30 | ASGI server for FastAPI |
+| pydantic | >=2.9 | API request/response models (server.py only — core uses dataclasses) |
+
+### 1.4 Storage & Data
+
+| Component | Version | Purpose |
+|-----------|---------|---------|
+| pyyaml | >=6.0 | YAML frontmatter parsing (memory entries, skill templates) |
+| aiofiles | >=24.1 | Async file I/O for non-blocking reads |
+| python-dotenv | >=1.0 | `.env` file loading |
+
+### 1.5 Development
+
+| Component | Version | Purpose |
+|-----------|---------|---------|
+| pytest | >=8.3 | Testing framework |
+| pytest-asyncio | >=0.24 | Async test support (auto mode) |
+| pytest-cov | >=5.0 | Coverage reporting |
+| ruff | >=0.6 | Linting + formatting |
+
+### 1.6 What We DON'T Use
+
+The following are **not used** — the codebase intentionally avoids them:
+
+- ❌ SQLAlchemy / aiosqlite — storage uses sqlite3, JSON files, and YAML frontmatter directly
+- ❌ tiktoken — token estimation uses `chars / 3.0` heuristic
+- ❌ tenacity — retry logic is manual (3 attempts, exponential backoff)
+- ❌ mypy — not currently configured (type hints are for documentation only)
+- ❌ Pydantic for core types — core types are `dataclass` (Pydantic only in `server.py`)
+- ❌ aiohttp — all HTTP uses `httpx`
+- ❌ Prometheus / structlog — monitoring uses stdlib `logging`
 
 ---
 
-## 2. Core Module Implementation
+## 2. Module Reference
 
-### 2.1 Type System (types.py)
+### 2.1 Core Types (`types.py`)
+
+All core data models use `dataclass` (not Pydantic):
 
 ```python
-"""
-Core type definitions
-
-All data models use Pydantic v2, providing:
-1. Runtime type validation
-2. JSON serialization
-3. Documentation generation
-"""
-
-from pydantic import BaseModel, Field, ConfigDict
-from enum import Enum
-from typing import Optional, List, Dict, Any, Literal
-from datetime import datetime
-from uuid import uuid4
-
-
-class MessageRole(str, Enum):
-    """Message role enumeration"""
-    SYSTEM = "system"
-    USER = "user"
-    ASSISTANT = "assistant"
-    TOOL = "tool"
-
-
-class ToolCall(BaseModel):
-    """Tool call definition"""
-    model_config = ConfigDict(frozen=True)
-    
-    id: str = Field(default_factory=lambda: str(uuid4()))
-    name: str = Field(description="Tool name")
-    arguments: Dict[str, Any] = Field(default_factory=dict, description="Call arguments")
-
-
-class Message(BaseModel):
-    """Base message model"""
-    model_config = ConfigDict(frozen=True)
-    
-    role: MessageRole
+@dataclass
+class Message:
+    role: Role          # SYSTEM | USER | ASSISTANT | TOOL
     content: str
-    name: Optional[str] = None
-    tool_calls: Optional[List[ToolCall]] = None
-    tool_call_id: Optional[str] = None
-    reasoning: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-
-class AgentConfig(BaseModel):
-    """Agent configuration"""
-    model: str = Field(default="openai/gpt-4o", description="Model identifier")
-    api_key: Optional[str] = Field(default=None, description="API key")
-    base_url: Optional[str] = Field(default=None, description="Custom API URL")
-    max_iterations: int = Field(default=50, ge=1, le=200)
-    context_window: int = Field(default=128000, ge=1000)
-    temperature: float = Field(default=0.7, ge=0, le=2)
-    permission_mode: Literal["accept_all", "auto", "confirm_all"] = "accept_all"
-    compact_threshold: float = Field(default=0.8, ge=0.5, le=0.95)
-    
-    # Concurrency control
-    max_concurrent_tasks: int = Field(default=5, ge=1, le=20)
-    max_concurrent_subagents: int = Field(default=3, ge=1, le=10)
-    
-    # Timeout configuration
-    tool_timeout: float = Field(default=60.0, ge=1.0)
-    subagent_timeout: float = Field(default=300.0, ge=10.0)
-
-
-class ToolContext(BaseModel):
-    """Tool execution context"""
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    
-    agent_id: str
-    session_id: str
-    workspace_dir: str
-    readonly: bool = False
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-```
-
-### 2.2 Configuration Management (config.py)
-
-```python
-"""
-Configuration management system
-
-Supports multiple configuration sources (priority from high to low):
-1. Direct code injection
-2. Environment variables
-3. Configuration files
-4. Default values
-"""
-
-import os
-import yaml
-from pathlib import Path
-from typing import Optional
-from pydantic_settings import BaseSettings
-
-
-class Settings(BaseSettings):
-    """Application settings"""
-    
-    # LLM configuration
-    openai_api_key: Optional[str] = None
-    anthropic_api_key: Optional[str] = None
-    default_model: str = "openai/gpt-4o"
-    
-    # Application configuration
-    log_level: str = "INFO"
-    database_url: str = "sqlite:///./feinn.db"
-    workspace_dir: str = "."
-    
-    # Permission configuration
-    default_permission: str = "accept_all"  # accept_all, auto, confirm_all
-    
-    # Concurrency configuration
-    max_concurrent_tasks: int = 5
-    max_concurrent_subagents: int = 3
-    
-    # MCP configuration
-    mcp_servers: dict = {}
-    
-    class Config:
-        env_prefix = "FEINN_"
-        env_file = ".env"
-    
-    @classmethod
-    def from_yaml(cls, path: Path) -> "Settings":
-        """Load configuration from YAML file"""
-        if not path.exists():
-            return cls()
-        
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        
-        return cls(**data)
-    
-    def to_yaml(self, path: Path) -> None:
-        """Save configuration to YAML file"""
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            yaml.dump(self.model_dump(), f, default_flow_style=False)
-
-
-def load_config(config_path: Optional[Path] = None) -> Settings:
-    """Load configuration"""
-    # 1. Load from file
-    if config_path is None:
-        config_path = Path.home() / ".feinn" / "config.yaml"
-    
-    settings = Settings.from_yaml(config_path)
-    
-    # 2. Environment variables auto-override (Pydantic Settings feature)
-    
-    return settings
-```
-
-### 2.3 Provider Adapter (providers.py)
-
-```python
-"""
-LLM provider adapter
-
-Unified interface supporting multiple LLM providers:
-- OpenAI
-- Anthropic
-- Azure OpenAI
-- vLLM
-- Local models
-"""
-
-from abc import ABC, abstractmethod
-from typing import AsyncIterator, List, Dict, Any, Optional
-import aiohttp
-import tiktoken
-
-
-class Provider(ABC):
-    """Abstract base class for LLM providers"""
-    
-    def __init__(self, config: AgentConfig):
-        self.config = config
-        self.session: Optional[aiohttp.ClientSession] = None
-    
-    async def __aenter__(self):
-        self.session = aiohttp.ClientSession()
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.session:
-            await self.session.close()
-    
-    @abstractmethod
-    async def complete(
-        self,
-        messages: List[Message],
-        tools: Optional[List[Dict]] = None
-    ) -> AsyncIterator[Message]:
-        """Send completion request and return streaming response"""
-        pass
-    
-    @abstractmethod
-    def count_tokens(self, text: str) -> int:
-        """Calculate token count"""
-        pass
-    
-    @abstractmethod
-    def get_model_info(self) -> Dict[str, Any]:
-        """Get model information"""
-        pass
-
-
-class OpenAIProvider(Provider):
-    """OpenAI API provider"""
-    
-    BASE_URL = "https://api.openai.com/v1"
-    
-    async def complete(
-        self,
-        messages: List[Message],
-        tools: Optional[List[Dict]] = None
-    ) -> AsyncIterator[Message]:
-        url = f"{self.config.base_url or self.BASE_URL}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.config.api_key}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "model": self.config.model,
-            "messages": [m.model_dump() for m in messages],
-            "temperature": self.config.temperature,
-            "stream": True
-        }
-        
-        if tools:
-            payload["tools"] = tools
-        
-        async with self.session.post(url, headers=headers, json=payload) as resp:
-            async for line in resp.content:
-                if line.startswith(b"data: "):
-                    data = line[6:].decode("utf-8").strip()
-                    if data == "[DONE]":
-                        break
-                    # Parse and yield message
-                    yield self._parse_chunk(data)
-    
-    def count_tokens(self, text: str) -> int:
-        try:
-            encoding = tiktoken.encoding_for_model(self.config.model)
-            return len(encoding.encode(text))
-        except:
-            # Fallback: approximate with character count / 3
-            return len(text) // 3
-    
-    def _parse_chunk(self, data: str) -> Message:
-        """Parse SSE chunk"""
-        import json
-        chunk = json.loads(data)
-        delta = chunk["choices"][0]["delta"]
-        
-        return Message(
-            role=MessageRole.ASSISTANT,
-            content=delta.get("content", ""),
-            tool_calls=self._parse_tool_calls(delta.get("tool_calls"))
-        )
-
-
-class AnthropicProvider(Provider):
-    """Anthropic Claude API provider"""
-    
-    BASE_URL = "https://api.anthropic.com/v1"
-    
-    async def complete(
-        self,
-        messages: List[Message],
-        tools: Optional[List[Dict]] = None
-    ) -> AsyncIterator[Message]:
-        url = f"{self.config.base_url or self.BASE_URL}/messages"
-        headers = {
-            "x-api-key": self.config.api_key,
-            "Content-Type": "application/json",
-            "anthropic-version": "2023-06-01"
-        }
-        
-        # Convert messages to Anthropic format
-        anthropic_messages = self._convert_messages(messages)
-        
-        payload = {
-            "model": self.config.model,
-            "messages": anthropic_messages,
-            "temperature": self.config.temperature,
-            "max_tokens": 4096,
-            "stream": True
-        }
-        
-        if tools:
-            payload["tools"] = tools
-        
-        async with self.session.post(url, headers=headers, json=payload) as resp:
-            async for line in resp.content:
-                if line.startswith(b"data: "):
-                    data = line[6:].decode("utf-8").strip()
-                    if data == "[DONE]":
-                        break
-                    yield self._parse_chunk(data)
-    
-    def count_tokens(self, text: str) -> int:
-        # Claude uses different tokenizer
-        # Approximate: character count / 3.5
-        return int(len(text) / 3.5)
-    
-    def _convert_messages(self, messages: List[Message]) -> List[Dict]:
-        """Convert to Anthropic message format"""
-        result = []
-        for msg in messages:
-            if msg.role == MessageRole.SYSTEM:
-                # System message handled separately in Anthropic
-                continue
-            result.append({
-                "role": msg.role.value,
-                "content": msg.content
-            })
-        return result
-
-
-class ProviderRegistry:
-    """Provider registry"""
-    
-    _providers: Dict[str, type[Provider]] = {
-        "openai": OpenAIProvider,
-        "anthropic": AnthropicProvider,
-        # Add more providers...
-    }
-    
-    @classmethod
-    def get_provider(cls, model: str, config: AgentConfig) -> Provider:
-        """Get provider instance by model identifier"""
-        provider_name = model.split("/")[0]
-        provider_class = cls._providers.get(provider_name)
-        if not provider_class:
-            raise ValueError(f"Unknown provider: {provider_name}")
-        return provider_class(config)
-    
-    @classmethod
-    def register(cls, name: str, provider_class: type[Provider]):
-        """Register new provider"""
-        cls._providers[name] = provider_class
-```
-
-### 2.4 Context Management (context.py)
-
-```python
-"""
-Context management system
-
-Manages conversation history, state, and compression.
-"""
-
-from typing import List, Optional
-from dataclasses import dataclass, field
-import sqlite3
-import json
-
+    tool_calls: list[ToolCall]
+    tool_call_id: str
+    tool_name: str
+    images: list[dict[str, str]]
+    reasoning: str      # thinking/reasoning content
 
 @dataclass
-class ContextWindow:
-    """Context window"""
-    messages: List[Message] = field(default_factory=list)
-    system_prompt: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    
-    def add_message(self, message: Message) -> None:
-        """Add message"""
-        self.messages.append(message)
-    
-    def get_messages(self) -> List[Message]:
-        """Get all messages"""
-        return self.messages.copy()
-    
-    def get_token_count(self, provider: Provider) -> int:
-        """Calculate total token count"""
-        total = 0
-        for msg in self.messages:
-            total += provider.count_tokens(msg.content)
-        return total
-    
-    def clear(self) -> None:
-        """Clear context"""
-        self.messages.clear()
+class ToolCall:
+    id: str
+    name: str
+    input: dict[str, Any]
 
-
-class ContextManager:
-    """Context manager"""
-    
-    def __init__(self, config: AgentConfig, provider: Provider):
-        self.config = config
-        self.provider = provider
-        self.window = ContextWindow()
-        self.compaction_engine = CompactionEngine(config)
-    
-    async def add_message(self, message: Message) -> None:
-        """Add message and check if compression needed"""
-        self.window.add_message(message)
-        
-        # Check if compression needed
-        token_count = self.window.get_token_count(self.provider)
-        threshold = int(self.config.context_window * self.config.compact_threshold)
-        
-        if token_count > threshold:
-            await self._compact_context()
-    
-    async def _compact_context(self) -> None:
-        """Execute context compression"""
-        self.window.messages = await self.compaction_engine.compact(
-            self.window.messages,
-            target_tokens=int(self.config.context_window * 0.6)
-        )
-    
-    def get_messages_for_llm(self) -> List[Dict]:
-        """Get messages in LLM API format"""
-        result = []
-        if self.window.system_prompt:
-            result.append({
-                "role": "system",
-                "content": self.window.system_prompt
-            })
-        for msg in self.window.messages:
-            result.append({
-                "role": msg.role.value,
-                "content": msg.content,
-                **({"tool_calls": msg.tool_calls} if msg.tool_calls else {}),
-                **({"tool_call_id": msg.tool_call_id} if msg.tool_call_id else {})
-            })
-        return result
+@dataclass
+class ToolDef:
+    name: str
+    description: str
+    input_schema: dict[str, Any]
+    handler: Callable
+    read_only: bool
+    concurrent_safe: bool
+    destructive: bool
+    requires_env: list[str]
+    max_result_chars: int
 ```
 
-### 2.5 Tool System (tools.py)
+**Stream event types** (all `dataclass`, yielded by `FeinnAgent.run()`):
+
+| Event | When | Fields |
+|-------|------|--------|
+| `TextChunk` | LLM streaming text | text: str |
+| `ThinkingChunk` | Reasoning/thinking block | thinking: str |
+| `ToolStart` | Before tool execution | name, inputs, call_id |
+| `ToolEnd` | After tool execution | name, result, call_id, permitted |
+| `PermissionRequest` | User needs to approve | name, inputs, call_id, granted |
+| `AssistantTurn` | Complete LLM turn | text, reasoning, tool_calls, input_tokens, output_tokens |
+| `TurnDone` | One turn (with tools) finished | input_tokens, output_tokens |
+| `AgentDone` | Agent loop finished | total_input_tokens, total_output_tokens, turn_count |
+
+Union type: `AgentEvent = Union[TextChunk, ThinkingChunk, ToolStart, ToolEnd, PermissionRequest, TurnDone, AgentDone, AssistantTurn]`
+
+### 2.2 Configuration (`config.py`)
+
+Three-layer priority (highest wins):
+
+1. **Environment variables** — loaded from `.env` or `~/.feinn/.env` via `python-dotenv`
+2. **Config file** — `~/.feinn/config.json` (JSON, not YAML)
+3. **Hardcoded defaults** — `_DEFAULTS` dict in `config.py`
+
+Config is a plain `dict[str, Any]` — no Settings class.
+
+Key defaults:
 
 ```python
-"""
-Tool system
-
-Dynamic tool registration and execution.
-"""
-
-from typing import Callable, Dict, Any, Optional
-from functools import wraps
-import inspect
-import json
-
-
-class Tool:
-    """Tool definition"""
-    
-    def __init__(
-        self,
-        name: str,
-        description: str,
-        parameters: Dict[str, Any],
-        handler: Callable,
-        is_destructive: bool = False
-    ):
-        self.name = name
-        self.description = description
-        self.parameters = parameters
-        self.handler = handler
-        self.is_destructive = is_destructive
-    
-    @property
-    def schema(self) -> Dict[str, Any]:
-        """Get OpenAI-compatible tool schema"""
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.parameters
-            }
-        }
-    
-    async def execute(self, arguments: Dict[str, Any], context: ToolContext) -> str:
-        """Execute tool"""
-        # Check if handler is async
-        if inspect.iscoroutinefunction(self.handler):
-            result = await self.handler(**arguments, context=context)
-        else:
-            result = self.handler(**arguments, context=context)
-        
-        # Convert result to string
-        if isinstance(result, dict):
-            return json.dumps(result, ensure_ascii=False)
-        return str(result)
-
-
-class ToolRegistry:
-    """Tool registry"""
-    
-    def __init__(self):
-        self._tools: Dict[str, Tool] = {}
-    
-    def register(
-        self,
-        name: str,
-        description: str,
-        parameters: Optional[Dict] = None,
-        is_destructive: bool = False
-    ) -> Callable:
-        """Tool registration decorator"""
-        def decorator(func: Callable) -> Callable:
-            tool = Tool(
-                name=name,
-                description=description,
-                parameters=parameters or self._infer_parameters(func),
-                handler=func,
-                is_destructive=is_destructive
-            )
-            self._tools[name] = tool
-            return func
-        return decorator
-    
-    def get_tool(self, name: str) -> Optional[Tool]:
-        """Get tool"""
-        return self._tools.get(name)
-    
-    def get_all_schemas(self) -> List[Dict]:
-        """Get all tool schemas"""
-        return [tool.schema for tool in self._tools.values()]
-    
-    def _infer_parameters(self, func: Callable) -> Dict[str, Any]:
-        """Infer parameters from function signature"""
-        sig = inspect.signature(func)
-        properties = {}
-        required = []
-        
-        for name, param in sig.parameters.items():
-            if name == "context":  # Skip context parameter
-                continue
-            
-            param_type = param.annotation
-            if param_type == str:
-                properties[name] = {"type": "string"}
-            elif param_type == int:
-                properties[name] = {"type": "integer"}
-            elif param_type == bool:
-                properties[name] = {"type": "boolean"}
-            else:
-                properties[name] = {"type": "string"}
-            
-            if param.default == inspect.Parameter.empty:
-                required.append(name)
-        
-        return {
-            "type": "object",
-            "properties": properties,
-            "required": required
-        }
-
-
-# Global registry instance
-registry = ToolRegistry()
-
-
-# Example tool definitions
-@registry.register(
-    name="Read",
-    description="Read file content",
-    parameters={
-        "type": "object",
-        "properties": {
-            "file_path": {"type": "string", "description": "File path"},
-            "limit": {"type": "integer", "description": "Max lines to read"}
-        },
-        "required": ["file_path"]
-    }
-)
-async def read_file(file_path: str, limit: int = 100, context: ToolContext = None) -> str:
-    """Read file"""
-    from pathlib import Path
-    path = Path(file_path)
-    if not path.exists():
-        return f"Error: File {file_path} does not exist"
-    
-    content = path.read_text(encoding="utf-8")
-    lines = content.split("\n")[:limit]
-    return "\n".join(lines)
-
-
-@registry.register(
-    name="Bash",
-    description="Execute bash command",
-    is_destructive=True
-)
-async def bash_command(command: str, context: ToolContext = None) -> str:
-    """Execute bash command"""
-    import asyncio
-    
-    # Security check
-    dangerous_commands = ["rm -rf /", ":(){ :|:& };:"]
-    for dangerous in dangerous_commands:
-        if dangerous in command:
-            return f"Error: Dangerous command detected: {dangerous}"
-    
-    proc = await asyncio.create_subprocess_shell(
-        command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        cwd=context.workspace_dir if context else None
-    )
-    
-    stdout, stderr = await proc.communicate()
-    
-    if proc.returncode != 0:
-        return f"Error (exit {proc.returncode}): {stderr.decode()}"
-    
-    return stdout.decode()[:10000]  # Limit output
+{
+    "model": "anthropic/claude-sonnet-4-20250514",
+    "max_tokens": 16384,
+    "max_iterations": 50,
+    "permission_mode": "accept-all",
+    "compaction_threshold": 0.70,
+    "compaction_preserve_last_n": 6,
+    "max_tool_output_chars": 32_000,
+    "max_concurrent_agents": 5,
+    "max_agent_depth": 3,
+    "thinking_enabled": False,
+    "thinking_budget": 10_000,
+    "server_host": "0.0.0.0",
+    "server_port": 8000,
+    "log_level": "INFO",
+}
 ```
 
-### 2.6 Agent Core (agent.py)
+API keys are mapped via `_ENV_MAP` from config keys to `FEINN_*` environment variables:
 
 ```python
-"""
-Agent core implementation
-
-Main execution engine coordinating all components.
-"""
-
-from typing import AsyncIterator, Optional, List, Dict, Any
-import asyncio
-
-
-class Agent:
-    """Agent core class"""
-    
-    def __init__(self, config: AgentConfig):
-        self.config = config
-        self.provider = ProviderRegistry.get_provider(config.model, config)
-        self.context = ContextManager(config, self.provider)
-        self.tool_registry = registry
-        self.permission_manager = PermissionManager(config.permission_mode)
-        self.iteration_count = 0
-    
-    async def run(
-        self,
-        user_input: str,
-        conversation_id: Optional[str] = None
-    ) -> AsyncIterator[Message]:
-        """
-        Main execution entry
-        
-        Yields:
-            Message objects (assistant responses, tool results)
-        """
-        # Add user message
-        user_message = Message(role=MessageRole.USER, content=user_input)
-        await self.context.add_message(user_message)
-        
-        while self.iteration_count < self.config.max_iterations:
-            self.iteration_count += 1
-            
-            # Call LLM
-            async for message in self._call_llm():
-                if message.tool_calls:
-                    # Handle tool calls
-                    for tool_call in message.tool_calls:
-                        result = await self._execute_tool(tool_call)
-                        yield Message(
-                            role=MessageRole.TOOL,
-                            content=result,
-                            tool_call_id=tool_call.id
-                        )
-                else:
-                    yield message
-            
-            # Check if conversation should end
-            if not message.tool_calls:
-                break
-        
-        if self.iteration_count >= self.config.max_iterations:
-            yield Message(
-                role=MessageRole.ASSISTANT,
-                content="Reached maximum iteration limit"
-            )
-    
-    async def _call_llm(self) -> AsyncIterator[Message]:
-        """Call LLM and stream response"""
-        messages = self.context.get_messages_for_llm()
-        tools = self.tool_registry.get_all_schemas()
-        
-        async with self.provider:
-            async for message in self.provider.complete(messages, tools):
-                await self.context.add_message(message)
-                yield message
-    
-    async def _execute_tool(self, tool_call: ToolCall) -> str:
-        """Execute tool call"""
-        tool = self.tool_registry.get_tool(tool_call.name)
-        if not tool:
-            return f"Error: Tool {tool_call.name} not found"
-        
-        # Permission check
-        context = ToolContext(
-            agent_id="agent_1",
-            session_id="session_1",
-            workspace_dir=self.config.workspace_dir
-        )
-        
-        permission = await self.permission_manager.check(tool, tool_call.arguments)
-        if not permission.allowed:
-            return f"Error: Permission denied - {permission.reason}"
-        
-        # Execute tool
-        try:
-            result = await asyncio.wait_for(
-                tool.execute(tool_call.arguments, context),
-                timeout=self.config.tool_timeout
-            )
-            return result
-        except asyncio.TimeoutError:
-            return f"Error: Tool execution timeout ({self.config.tool_timeout}s)"
-        except Exception as e:
-            return f"Error: {str(e)}"
+_ENV_MAP = {
+    "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "openai_api_key": "OPENAI_API_KEY",
+    "gemini_api_key": "GEMINI_API_KEY",
+    "siliconflow_api_key": "SILICONFLOW_API_KEY",
+    "openrouter_api_key": "OPENROUTER_API_KEY",
+    "azure_api_key": "AZURE_OPENAI_API_KEY",
+    # ... and more
+}
 ```
 
----
+### 2.3 Provider Layer (`providers.py`)
 
-## 3. Database Design
+Single streaming entry point with two code paths:
 
-### 3.1 Schema
-
-```sql
--- Conversations table
-CREATE TABLE conversations (
-    id TEXT PRIMARY KEY,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    config JSON,
-    metadata JSON
-);
-
--- Messages table
-CREATE TABLE messages (
-    id TEXT PRIMARY KEY,
-    conversation_id TEXT REFERENCES conversations(id),
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    tool_calls JSON,
-    tool_call_id TEXT,
-    reasoning TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Memories table
-CREATE TABLE memories (
-    id TEXT PRIMARY KEY,
-    scope TEXT NOT NULL,  -- 'workspace' or 'agent'
-    content TEXT NOT NULL,
-    embedding BLOB,  -- Vector embedding
-    metadata JSON,
-    access_count INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Tasks table
-CREATE TABLE tasks (
-    id TEXT PRIMARY KEY,
-    parent_id TEXT REFERENCES tasks(id),
-    status TEXT NOT NULL,  -- pending, running, completed, failed
-    priority INTEGER DEFAULT 0,
-    config JSON,
-    result JSON,
-    error TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    started_at TIMESTAMP,
-    completed_at TIMESTAMP
-);
-
--- Task dependencies table
-CREATE TABLE task_dependencies (
-    task_id TEXT REFERENCES tasks(id),
-    depends_on TEXT REFERENCES tasks(id),
-    PRIMARY KEY (task_id, depends_on)
-);
-
--- Audit log table
-CREATE TABLE audit_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    level TEXT NOT NULL,
-    agent_id TEXT,
-    session_id TEXT,
-    action TEXT NOT NULL,
-    details JSON
-);
+```
+stream(model, system, messages, tool_schemas, config)
+    ├── detect_provider(model) → ProviderInfo
+    ├── if anthropic → _stream_anthropic()
+    │   └── AsyncAnthropic SDK → TextChunk | ThinkingChunk | AssistantTurn
+    └── else → _stream_openai_compat()
+        └── AsyncOpenAI SDK → TextChunk | ThinkingChunk (via reasoning_content) | AssistantTurn
 ```
 
----
+**Provider auto-detection** maps model name → provider:
 
-## 4. API Design
+| Pattern | Provider | Context Limit |
+|---------|----------|---------------|
+| `claude` / `anthropic/` | anthropic | 200K |
+| `gpt` / `o[1-4]` / `openai/` | openai | 128K |
+| `gemini` / `google/` | gemini | 1M |
+| `qwen` | qwen | 1M |
+| `deepseek` | deepseek | 128K |
+| `kimi` | kimi | 128K |
+| `moonshot` | moonshot | 128K |
+| `siliconflow/` | siliconflow | 128K |
+| `openrouter/` | openrouter | 200K |
+| `ollama/` | ollama | 128K |
+| `vllm/` | vllm | 128K |
+| `lmstudio/` | lmstudio | 128K |
+| `custom/` | custom | 128K |
 
-### 4.1 REST API Endpoints
+**Anthropic path features**:
+- Tool calling via native SDK streaming
+- Extended thinking via `thinking` parameter
+- Image support (base64)
+
+**OpenAI-compat path features**:
+- Single code path for all 13 providers
+- `reasoning_content` support (Kimi, DeepSeek R1)
+- Provider-specific headers (OpenRouter, Kimi)
+- Azure OpenAI and vLLM API key handling
+
+**Cost estimation**:
 
 ```python
-from fastapi import FastAPI, WebSocket, HTTPException
-from fastapi.responses import StreamingResponse
-
-app = FastAPI(title="FeinnAgent API")
-
-
-@app.post("/conversations")
-async def create_conversation(config: AgentConfig):
-    """Create new conversation"""
-    conversation_id = str(uuid4())
-    # Save to database
-    return {"id": conversation_id, "config": config}
-
-
-@app.post("/conversations/{conversation_id}/messages")
-async def send_message(conversation_id: str, content: str):
-    """Send message and get streaming response"""
-    agent = await get_agent(conversation_id)
-    
-    async def generate():
-        async for message in agent.run(content):
-            yield f"data: {message.model_dump_json()}\n\n"
-    
-    return StreamingResponse(
-        generate(),
-        media_type="text/event-stream"
-    )
-
-
-@app.get("/conversations/{conversation_id}/messages")
-async def get_messages(conversation_id: str, limit: int = 100):
-    """Get conversation history"""
-    messages = await load_messages(conversation_id, limit)
-    return {"messages": messages}
-
-
-@app.post("/tasks")
-async def create_task(config: TaskConfig):
-    """Create task"""
-    task = await task_manager.create_task(config)
-    return {"id": task.id, "status": task.status}
-
-
-@app.get("/tasks/{task_id}")
-async def get_task(task_id: str):
-    """Get task status"""
-    task = await task_manager.get_task(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task
-
-
-@app.websocket("/ws/{conversation_id}")
-async def websocket_endpoint(websocket: WebSocket, conversation_id: str):
-    """WebSocket for real-time communication"""
-    await websocket.accept()
-    agent = await get_agent(conversation_id)
-    
-    try:
-        while True:
-            message = await websocket.receive_text()
-            async for response in agent.run(message):
-                await websocket.send_json(response.model_dump())
-    except Exception as e:
-        await websocket.close(code=1011, reason=str(e))
+_PRICING = {
+    "claude-opus-4":  (15.0, 75.0),
+    "claude-sonnet-4": (3.0, 15.0),
+    "gpt-4o":          (2.50, 10.0),
+    "gpt-4o-mini":     (0.15, 0.60),
+    "gemini-2.5-pro":  (1.25, 10.0),
+    "deepseek-v3":     (0.27, 1.10),
+}
 ```
 
----
+### 2.4 Context Assembly (`context.py`)
 
-## 5. Testing Strategy
-
-### 5.1 Unit Tests
+**Not** a context manager class — a single function that builds the system prompt:
 
 ```python
-import pytest
-from unittest.mock import Mock, AsyncMock
-
-
-@pytest.mark.asyncio
-async def test_agent_run():
-    """Test agent execution"""
-    config = AgentConfig(model="openai/gpt-4o")
-    agent = Agent(config)
-    
-    # Mock provider
-    agent.provider = AsyncMock()
-    agent.provider.complete.return_value = [
-        Message(role=MessageRole.ASSISTANT, content="Hello!")
-    ]
-    
-    messages = []
-    async for msg in agent.run("Hi"):
-        messages.append(msg)
-    
-    assert len(messages) > 0
-    assert messages[0].role == MessageRole.ASSISTANT
-
-
-@pytest.mark.asyncio
-async def test_tool_execution():
-    """Test tool execution"""
-    tool = registry.get_tool("Read")
-    context = ToolContext(
-        agent_id="test",
-        session_id="test",
-        workspace_dir="/tmp"
-    )
-    
-    result = await tool.execute(
-        {"file_path": "/tmp/test.txt"},
-        context
-    )
-    
-    assert isinstance(result, str)
+def build_system_prompt(
+    config: dict[str, Any],
+    *,
+    memory_context: str = "",
+    project_context: str = "",
+) -> str:
 ```
 
-### 5.2 Integration Tests
+The prompt includes:
+1. Base identity and core principles
+2. Tool descriptions (auto-generated from registry)
+3. Closed-loop learning guidance (configurable)
+4. Environment info: date, cwd, platform
+5. Git branch and status
+6. Project context: `CLAUDE.md` / `FEINN.md` (project-level + user-level)
+7. Memory context (from `memory/store.py`)
+
+### 2.5 Compaction (`compaction.py`)
+
+Three-layer strategy:
+
+```
+maybe_compact(state, config)
+    │
+    ├── Layer 1: Snip
+    │   Trim old tool result messages to max_chars (head 50% + tail 25%)
+    │   Preserves last N (default 6) tool messages untouched
+    │   Cost: zero (no API call)
+    │
+    ├── Layer 2: Compact (truncation fallback)
+    │   Keep first 2 messages (system/user) + last 30%
+    │   Replace middle with summary marker
+    │   Notifies on_compact callback with removed messages
+    │
+    └── Layer 3: Collapse (via force=True on context_length error)
+        Same as Compact but triggered on LLM context_length error
+```
+
+Trigger: when estimated tokens exceed `compaction_threshold` (default 70%) of context limit.
+
+Token estimation: `int(total_chars / 3.0) * 1.08` (8% safety buffer).
+
+### 2.6 Tool Registry (`tools/registry.py`)
+
+Simple dict-based registry:
 
 ```python
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_full_conversation():
-    """Test complete conversation flow"""
-    config = AgentConfig(
-        model="openai/gpt-4o",
-        api_key=os.getenv("OPENAI_API_KEY")
-    )
-    
-    agent = Agent(config)
-    
-    # Multi-turn conversation
-    responses = []
-    async for msg in agent.run("What is Python?"):
-        responses.append(msg)
-    
-    assert any("programming" in msg.content.lower() for msg in responses)
+_tools: dict[str, ToolDef] = {}
+
+register(tool_def: ToolDef)        # Register a tool
+deregister(name: str)              # Remove a tool
+get(name: str) → ToolDef | None    # Look up
+all_tools() → list[ToolDef]        # All registered
+tool_schemas() → list[dict]        # JSON schemas for LLM APIs
+
+async dispatch(name, params, config) → str                     # Single tool
+async dispatch_batch(calls, config) → list[str]                 # Batch with parallelization
 ```
 
----
+**Batch dispatch optimization**:
+- Tools with `concurrent_safe=True` AND `read_only=True` run in parallel via `asyncio.gather`
+- All other tools run sequentially (one at a time)
+- Results returned in call order
 
-## 6. Deployment
+### 2.7 Permission System (`permission/__init__.py`)
 
-### 6.1 Docker
+Four modes, decided per-tool-call:
 
-```dockerfile
-FROM python:3.11-slim
+| Mode | Behavior |
+|------|----------|
+| `accept-all` | All tools auto-approved |
+| `auto` | Read-only tools auto-approved; safe Bash commands auto-approved; destructive/write tools ask callback |
+| `manual` | All tools ask callback |
+| `plan` | Read-only auto-approved; Write/Edit allowed only for plan file; Bash safe commands auto-approved; everything else denied |
 
-WORKDIR /app
+**Safe command whitelist**: 30+ patterns (ls, cat, git status, python --version, etc.)
+**Unsafe command patterns**: 15+ patterns (rm -rf, git push --force, sudo, etc.)
+**Bash auto-approval**: command must match a safe pattern AND not match any unsafe pattern.
 
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+### 2.8 Sub-agent System (`subagent/manager.py`)
 
-# Copy code
-COPY src/ ./src/
-COPY pyproject.toml .
+Concurrent agent spawning with semaphore control:
 
-# Install package
-RUN pip install -e .
-
-# Expose port
-EXPOSE 8000
-
-# Run
-CMD ["feinn", "--serve", "--host", "0.0.0.0", "--port", "8000"]
+```python
+@dataclass
+class AgentDefinition:
+    name: str
+    description: str
+    system_prompt: str
+    model: str           # empty = inherit from parent
+    tools: list[str]     # empty = all tools
 ```
 
-### 6.2 Kubernetes
+**5 built-in types**:
 
+| Type | Purpose | Tool Restrictions |
+|------|---------|-------------------|
+| general-purpose | Versatile research and multi-step tasks | (all tools) |
+| coder | Code implementation | (all tools) |
+| reviewer | Code review | Read/Glob/Grep/Bash (read-only) |
+| researcher | Information gathering | Read/Glob/Grep/WebFetch/Grep/MemorySearch/SessionSearch |
+| tester | Test writing | Read/Glob/Grep/Bash/Write/Edit |
+
+**Lifecycle**:
+- `spawn()` → creates asyncio task → returns SubAgentTask (PENDING)
+- Sub-agent runs isolated FeinnAgent with own state
+- `check_result()` → polls for DONE/ERROR
+- Semaphore (default 5) controls max concurrency
+- Max depth (default 3) prevents infinite recursion
+
+### 2.9 Memory System (`memory/store.py`)
+
+Dual-scope, YAML-frontmatter storage:
+
+| Scope | Path | Persistence |
+|-------|------|-------------|
+| user | `~/.feinn/memory/` | Cross-project, persists across sessions |
+| project | `.feinn/memory/` | Repo-local |
+
+**Memory entry format** (Markdown + YAML frontmatter):
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: feinn-agent
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: feinn-agent
-  template:
-    metadata:
-      labels:
-        app: feinn-agent
-    spec:
-      containers:
-      - name: feinn
-        image: feinn-agent:latest
-        ports:
-        - containerPort: 8000
-        env:
-        - name: OPENAI_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: api-keys
-              key: openai
-        - name: DATABASE_URL
-          value: "postgresql://user:pass@db/feinn"
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "500m"
-          limits:
-            memory: "2Gi"
-            cpu: "2000m"
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: feinn-service
-spec:
-  selector:
-    app: feinn-agent
-  ports:
-  - port: 80
-    targetPort: 8000
-  type: LoadBalancer
+name: coding_style
+description: Python formatting preferences
+type: feedback          # user | feedback | project | reference
+confidence: 0.95
+source: user
+last_used_at: 2026-04-11
+conflict_group: coding_style
+---
+Content body...
 ```
 
----
+**Search**: keyword-based with `confidence × recency` scoring.
 
-## 7. Monitoring
+### 2.10 Task System (`task/store.py`)
 
-### 7.1 Metrics
+DAG task orchestration:
 
 ```python
-from prometheus_client import Counter, Histogram, Gauge
-
-# Request metrics
-request_count = Counter('feinn_requests_total', 'Total requests')
-request_duration = Histogram('feinn_request_duration_seconds', 'Request duration')
-
-# Token metrics
-token_count = Counter('feinn_tokens_total', 'Total tokens', ['type'])
-
-# Active sessions
-active_sessions = Gauge('feinn_active_sessions', 'Active sessions')
-
-# Tool execution
-tool_executions = Counter('feinn_tool_executions_total', 'Tool executions', ['tool'])
+class Task:
+    id, subject, description, status
+    active_form, owner
+    blocks: list[str]       # tasks this task blocks
+    blocked_by: list[str]   # tasks blocking this task
+    metadata, created_at, updated_at
 ```
 
-### 7.2 Logging
+**Status lifecycle**: `pending → in_progress → completed | cancelled`
+
+**Storage**: `.feinn/tasks.json`
+
+**Tools**: TaskCreate, TaskUpdate, TaskList, TaskGet
+
+### 2.11 Agent Loop (`agent.py`)
 
 ```python
-import logging
-import structlog
-
-structlog.configure(
-    processors=[
-        structlog.stdlib.filter_by_level,
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-        structlog.processors.UnicodeDecoder(),
-        structlog.processors.JSONRenderer()
-    ],
-    context_class=dict,
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    wrapper_class=structlog.stdlib.BoundLogger,
-    cache_logger_on_first_use=True,
-)
-
-logger = structlog.get_logger()
+async for event in FeinnAgent(config=...).run("user message"):
+    ...
 ```
+
+**Per-turn flow**:
+```
+User message → append to state
+    → maybe_compact() (check threshold)
+    → _stream_with_retry() (3 attempts, exponential backoff)
+        → yields TextChunk / ThinkingChunk / AssistantTurn
+    → append assistant message to state
+    → yield TurnDone
+    → if no tool calls: yield AgentDone, return
+    → yield ToolStart for each tool
+    → _execute_tools(): permission check → dispatch_batch()
+    → yield ToolEnd for each tool
+    → append tool results to state
+    → learning hooks: trajectory, session store, nudge counters
+    → loop back to LLM
+```
+
+**Learning hooks** (after each turn):
+- Trajectory recorder (optional)
+- Session store (SQLite FTS5, non-blocking)
+- Nudge counter update (memory/skill intervals)
+- Background review spawn (daemon thread when threshold reached)
+
+### 2.12 Learning System (`learning/`)
+
+| Module | File | Purpose |
+|--------|------|---------|
+| NudgeCounter | `nudge.py` | Tracks turns/tool-iterations, triggers review at configurable intervals |
+| BackgroundReviewer | `review.py` | Daemon thread spawns review agent to extract memory/skill learnings |
+| SessionStore | `session_store.py` | SQLite + FTS5, per-turn persistence with cross-session search |
+| SessionSearch tool | `session_search.py` | FTS5 DISCOVER / SCROLL / BROWSE search modes |
+
+### 2.13 MCP Integration (`mcp/client.py`)
+
+Model Context Protocol client supporting:
+- **stdio** transport (local MCP servers as subprocess)
+- **SSE** transport (remote MCP servers over HTTP)
+- **HTTP** transport (direct POST)
+
+Auto-discovers and registers MCP tools into the FeinnAgent tool registry.
+
+### 2.14 Checkpoint System (`checkpoint/__init__.py`)
+
+Git-based snapshots:
+- Shadow git repository in `.feinn/checkpoints/`
+- Auto-checkpoints before file mutations
+- Rollback to any previous checkpoint
+- File exclusion patterns
+
+### 2.15 Plan System (`plan/__init__.py`)
+
+Markdown-based execution plans:
+- Plan CRUD in `.feinn/plans/`
+- Status lifecycle: pending → in_progress → completed / cancelled / skipped
+- `/plan` command for viewing and management
+
+### 2.16 Display System (`display/__init__.py`)
+
+CLI visualization:
+- Kawaii-style emoji display
+- Spinner engine (10fps, animated)
+- Tool cards (name, status, elapsed time)
+- Unified diff display with color
+- Progress bars and status indicators
 
 ---
 
-## 8. Appendix
-
-### 8.1 Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `FEINN_LOG_LEVEL` | Log level | INFO |
-| `FEINN_DATABASE_URL` | Database URL | sqlite:///./feinn.db |
-| `FEINN_WORKSPACE_DIR` | Workspace directory | . |
-| `FEINN_DEFAULT_MODEL` | Default model | openai/gpt-4o |
-| `FEINN_MAX_CONCURRENT_TASKS` | Max concurrent tasks | 5 |
-| `FEINN_MCP_SERVERS` | MCP server config | {} |
-
-### 8.2 File Structure
+## 3. File Structure
 
 ```
-feinn-agent/
-├── src/feinn_agent/
+src/feinn_agent/
+├── __init__.py              # Public API exports
+├── agent.py                 # Core agent loop (341 lines)
+├── cli.py                   # CLI entry point (Click, 814 lines)
+├── cli_tui.py               # Terminal UI (prompt_toolkit, 1003 lines)
+├── config.py                # Configuration (dict-based, 160 lines)
+├── context.py               # System prompt assembly (182 lines)
+├── compaction.py            # Context compression (186 lines)
+├── providers.py             # LLM streaming (567 lines)
+├── server.py                # FastAPI server (295 lines)
+├── types.py                 # Core type definitions (216 lines)
+│
+├── tools/
 │   ├── __init__.py
-│   ├── agent.py          # Core agent
-│   ├── types.py          # Type definitions
-│   ├── config.py         # Configuration
-│   ├── providers.py      # LLM providers
-│   ├── context.py        # Context management
-│   ├── tools/
-│   │   ├── __init__.py
-│   │   ├── registry.py   # Tool registry
-│   │   ├── builtins.py   # Built-in tools
-│   │   └── mcp.py        # MCP client
-│   ├── memory/
-│   │   ├── __init__.py
-│   │   └── store.py      # Memory storage
-│   ├── task/
-│   │   ├── __init__.py
-│   │   └── manager.py    # Task management
-│   └── server.py         # API server
-├── tests/
-├── docs/
-├── pyproject.toml
-└── README.md
+│   ├── registry.py          # Tool registration & dispatch (136 lines)
+│   ├── builtins.py          # Read/Write/Edit/Bash/Glob/Grep/WebFetch/AskUser (449 lines)
+│   ├── process.py           # Process execution & process-tree cleanup (210 lines)
+│   ├── output.py            # Output truncation & diff generation (64 lines)
+│   ├── tmux.py              # Tmux persistent session control (376 lines)
+│   ├── diagnostics.py       # LSP-style code diagnostics (250 lines)
+│   ├── skills.py            # Skill tool wrappers (287 lines)
+│   ├── browser.py           # Browser automation (633 lines)
+│   └── browser_providers/   # Provider implementations (local, browserbase, browseruse, firecrawl)
+│
+├── memory/
+│   └── store.py             # Dual-scope YAML frontmatter memory (396 lines)
+│
+├── task/
+│   └── store.py             # DAG task orchestration (399 lines)
+│
+├── skill/
+│   ├── __init__.py
+│   ├── loader.py            # Skill discovery & parsing (289 lines)
+│   ├── builtin.py           # Built-in skills: /commit, /review, /explain, /test, /doc (246 lines)
+│   ├── executor.py          # Skill execution (119 lines)
+│   ├── auto_create.py       # Auto skill creation
+│   ├── curator.py           # Skill curation
+│   └── usage.py             # Skill usage tracking
+│
+├── subagent/
+│   └── manager.py           # Concurrent sub-agent system (465 lines)
+│
+├── mcp/
+│   └── client.py            # MCP protocol client (314 lines)
+│
+├── learning/
+│   ├── __init__.py
+│   ├── nudge.py             # Nudge counters (132 lines)
+│   ├── review.py            # Background review agent (504 lines)
+│   ├── session_store.py     # SQLite FTS5 session persistence (417 lines)
+│   └── session_search.py    # Cross-session search tool (147 lines)
+│
+├── permission/
+│   └── __init__.py          # 4-mode permission system (193 lines)
+│
+├── checkpoint/
+│   └── __init__.py          # Git-based snapshot & rollback (518 lines)
+│
+├── plan/
+│   └── __init__.py          # Markdown-based execution plans (471 lines)
+│
+├── trajectory/
+│   └── __init__.py          # Compressed JSON trajectory logs (407 lines)
+│
+├── interrupt/
+│   └── __init__.py          # Interrupt signal management (106 lines)
+│
+├── display/
+│   └── __init__.py          # CLI visualization (846 lines)
+│
+└── plugin/
+    └── __init__.py           # Plugin system (placeholder)
+```
+
+---
+
+## 4. REST API (`server.py`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/chat` | Send message, get SSE stream |
+| POST | `/sessions` | Create new session |
+| GET | `/sessions/{id}` | Get session history |
+| DELETE | `/sessions/{id}` | Delete session |
+| GET | `/health` | Health check |
+
+SSE event types match the agent stream events.
+
+---
+
+## 5. Testing
+
+- Framework: pytest + pytest-asyncio (auto mode)
+- 26 test files covering all major modules
+- Async mocks for LLM calls (no external API dependency)
+- `@pytest.mark.integration` for tests requiring network
+
+```bash
+pytest tests/ -v
+pytest tests/ --cov=src/feinn_agent --cov-report=term-missing
 ```

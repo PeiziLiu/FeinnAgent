@@ -157,9 +157,9 @@ Skill 是封装常见工作流程的可复用提示模板，通过触发词快�
 ```bash
 git clone https://github.com/PeiziLiu/FeinnAgent.git
 cd feinn-agent
-python3.11 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-python3.11 -m pip install -e .
+python3 -m pip install -e .
 cp .env.example .env
 # 编辑 .env 配置 API 密钥
 ```
@@ -227,7 +227,7 @@ feinn --serve
 | `AZURE_OPENAI_API_KEY` | Azure 密钥 | `...` |
 | `VLLM_BASE_URL` | vLLM 服务地址 | `http://localhost:8000/v1` |
 | `LOG_LEVEL` | 日志级别 | `INFO` / `DEBUG` |
-| `PERMISSION_MODE` | 权限模式 | `accept_all` / `auto` / `manual` |
+| `PERMISSION_MODE` | 权限模式 | `accept-all` / `auto` / `manual` / `plan` |
 
 ---
 

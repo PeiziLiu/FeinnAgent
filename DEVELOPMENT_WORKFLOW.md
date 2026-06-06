@@ -161,14 +161,14 @@ Closes #123"
 
 ```bash
 # 1. 本地测试
-python3.11 -m pytest tests/ -v --tb=short
+python -m pytest tests/ -v --tb=short
 
 # 2. 代码质量检查
-python3.11 -m ruff check src/
-python3.11 -m ruff format src/ --check
+python -m ruff check src/
+python -m ruff format src/ --check
 
 # 3. 类型检查 (如有配置)
-# python3.11 -m mypy src/feinn_agent/
+# python -m mypy src/feinn_agent/
 ```
 
 **测试通过标准**:
@@ -286,11 +286,11 @@ cd ../feinn-agent-feature-xxx
 git checkout -b feature/xxx
 
 # 开发中测试
-python3.11 -m pytest tests/test_xxx.py -v
+python -m pytest tests/test_xxx.py -v
 
 # 提交前检查
-python3.11 -m pytest tests/ -v
-python3.11 -m ruff check src/
+python -m pytest tests/ -v
+python -m ruff check src/
 
 # 合并到 dev
 git checkout dev
@@ -389,9 +389,9 @@ async def read_file(path, limit=100):
 ```python
 # Good — 异步 IO + 超时
 async def fetch_url(url: str) -> str:
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-            return await resp.text()
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.get(url)
+        return response.text
 
 # Good — 同步阻塞通过 to_thread 桥接
 async def run_tmux_command(cmd: str) -> str:
@@ -434,10 +434,10 @@ class PermissionMode(StrEnum):
 
 ```bash
 # 代码检查（必须在提交前通过）
-python3.11 -m ruff check src/
+python -m ruff check src/
 
 # 代码格式化
-python3.11 -m ruff format src/
+python -m ruff format src/
 
 # ruff 配置位于 pyproject.toml:
 # target-version = "py311"
@@ -568,16 +568,16 @@ async def test_agent_handles_tool_call():
 
 ```bash
 # 运行所有测试
-python3.11 -m pytest tests/ -v --tb=short
+python -m pytest tests/ -v --tb=short
 
 # 运行特定模块测试
-python3.11 -m pytest tests/test_tools.py -v
+python -m pytest tests/test_tools.py -v
 
 # 带覆盖率报告
-python3.11 -m pytest tests/ --cov=src/feinn_agent --cov-report=term-missing
+python -m pytest tests/ --cov=src/feinn_agent --cov-report=term-missing
 
 # 只运行快速单元测试（排除集成测试）
-python3.11 -m pytest tests/ -v -m "not integration"
+python -m pytest tests/ -v -m "not integration"
 ```
 
 ---

@@ -1,5 +1,7 @@
 # Interactive Mode Enhancement - 需求文档
 
+> 状态: **已实现** (src/feinn_agent/cli_tui.py, src/feinn_agent/display/)
+
 ## 1. 概述
 
 ### 背景

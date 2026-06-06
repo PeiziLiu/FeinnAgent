@@ -5,8 +5,17 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from feinn_agent.types import (
-    AgentState, AgentDone, Message, PermissionMode, Role,
-    TextChunk, ToolCall, ToolDef, ToolStart, ToolEnd, TurnDone,
+    AgentState,
+    AgentDone,
+    Message,
+    PermissionMode,
+    Role,
+    TextChunk,
+    ToolCall,
+    ToolDef,
+    ToolStart,
+    ToolEnd,
+    TurnDone,
 )
 from feinn_agent.config import load_config
 from feinn_agent.tools.registry import register, dispatch, dispatch_batch, clear, tool_schemas
@@ -15,6 +24,7 @@ from feinn_agent.providers import detect_provider, ProviderInfo
 
 
 # ── Types tests ─────────────────────────────────────────────────────
+
 
 class TestTypes:
     def test_message_to_dict(self):
@@ -40,6 +50,7 @@ class TestTypes:
 
 # ── Config tests ────────────────────────────────────────────────────
 
+
 class TestConfig:
     def test_load_defaults(self):
         cfg = load_config()
@@ -53,6 +64,7 @@ class TestConfig:
 
 
 # ── Provider detection tests ────────────────────────────────────────
+
 
 class TestProviders:
     def test_anthropic_detection(self):
@@ -80,6 +92,7 @@ class TestProviders:
 
 # ── Tool registry tests ─────────────────────────────────────────────
 
+
 class TestToolRegistry:
     def setup_method(self):
         clear()
@@ -89,13 +102,15 @@ class TestToolRegistry:
         async def hello_handler(params, config):
             return f"Hello, {params.get('name', 'world')}!"
 
-        register(ToolDef(
-            name="Hello",
-            description="Says hello",
-            input_schema={"type": "object", "properties": {"name": {"type": "string"}}},
-            handler=hello_handler,
-            read_only=True,
-        ))
+        register(
+            ToolDef(
+                name="Hello",
+                description="Says hello",
+                input_schema={"type": "object", "properties": {"name": {"type": "string"}}},
+                handler=hello_handler,
+                read_only=True,
+            )
+        )
 
         result = await dispatch("Hello", {"name": "test"}, {})
         assert result == "Hello, test!"
@@ -110,13 +125,15 @@ class TestToolRegistry:
         async def long_handler(params, config):
             return "x" * 100
 
-        register(ToolDef(
-            name="LongOutput",
-            description="Returns long output",
-            input_schema={"type": "object", "properties": {}},
-            handler=long_handler,
-            max_result_chars=20,
-        ))
+        register(
+            ToolDef(
+                name="LongOutput",
+                description="Returns long output",
+                input_schema={"type": "object", "properties": {}},
+                handler=long_handler,
+                max_result_chars=20,
+            )
+        )
 
         result = await dispatch("LongOutput", {}, {})
         assert len(result) < 100
@@ -127,12 +144,14 @@ class TestToolRegistry:
         async def failing_handler(params, config):
             raise ValueError("test error")
 
-        register(ToolDef(
-            name="Failing",
-            description="Always fails",
-            input_schema={"type": "object", "properties": {}},
-            handler=failing_handler,
-        ))
+        register(
+            ToolDef(
+                name="Failing",
+                description="Always fails",
+                input_schema={"type": "object", "properties": {}},
+                handler=failing_handler,
+            )
+        )
 
         result = await dispatch("Failing", {}, {})
         assert "Error" in result
@@ -143,14 +162,16 @@ class TestToolRegistry:
         async def add_handler(params, config):
             return str(params.get("a", 0) + params.get("b", 0))
 
-        register(ToolDef(
-            name="Add",
-            description="Adds numbers",
-            input_schema={"type": "object", "properties": {"a": {"type": "integer"}, "b": {"type": "integer"}}},
-            handler=add_handler,
-            read_only=True,
-            concurrent_safe=True,
-        ))
+        register(
+            ToolDef(
+                name="Add",
+                description="Adds numbers",
+                input_schema={"type": "object", "properties": {"a": {"type": "integer"}, "b": {"type": "integer"}}},
+                handler=add_handler,
+                read_only=True,
+                concurrent_safe=True,
+            )
+        )
 
         results = await dispatch_batch(
             [("Add", {"a": 1, "b": 2}), ("Add", {"a": 3, "b": 4})],
@@ -159,17 +180,20 @@ class TestToolRegistry:
         assert results == ["3", "7"]
 
     def test_tool_schemas(self):
-        register(ToolDef(
-            name="SchemaTest",
-            description="For schema testing",
-            input_schema={"type": "object", "properties": {"x": {"type": "string"}}},
-            handler=AsyncMock(),
-        ))
+        register(
+            ToolDef(
+                name="SchemaTest",
+                description="For schema testing",
+                input_schema={"type": "object", "properties": {"x": {"type": "string"}}},
+                handler=AsyncMock(),
+            )
+        )
         schemas = tool_schemas()
         assert any(s["function"]["name"] == "SchemaTest" for s in schemas)
 
 
 # ── Compaction tests ────────────────────────────────────────────────
+
 
 class TestCompaction:
     def test_estimate_tokens(self):
@@ -192,18 +216,19 @@ class TestCompaction:
 
 # ── Permission tests ────────────────────────────────────────────────
 
+
 class TestPermission:
     def test_accept_all_mode(self):
         from feinn_agent.permission import check_permission
+
         cfg = {"permission_mode": "accept-all"}
         # Sync wrapper for async
-        result = asyncio.get_event_loop().run_until_complete(
-            check_permission("Bash", {"command": "rm -rf /"}, cfg)
-        )
+        result = asyncio.run(check_permission("Bash", {"command": "rm -rf /"}, cfg))
         assert result is True
 
     def test_safe_bash_commands(self):
         from feinn_agent.permission import is_safe_bash_command
+
         assert is_safe_bash_command("ls -la") is True
         assert is_safe_bash_command("git status") is True
         assert is_safe_bash_command("rm -rf /") is False
@@ -213,9 +238,11 @@ class TestPermission:
 
 # ── Memory tests ────────────────────────────────────────────────────
 
+
 class TestMemory:
     def test_memory_entry_roundtrip(self):
         from feinn_agent.memory.store import MemoryEntry
+
         entry = MemoryEntry(
             name="test",
             description="A test memory",
@@ -234,9 +261,11 @@ class TestMemory:
 
 # ── Task tests ──────────────────────────────────────────────────────
 
+
 class TestTask:
     def test_task_roundtrip(self):
         from feinn_agent.task.store import Task, TaskStatus
+
         t = Task(id="1", subject="Test task", description="A test", status=TaskStatus.PENDING)
         d = t.to_dict()
         assert d["id"] == "1"

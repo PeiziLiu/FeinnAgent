@@ -72,6 +72,7 @@ class TestFeinnCompleter:
         assert "@diff" in texts
 
     def test_file_path_completion_current_dir(self):
+        orig_cwd = os.getcwd()
         with tempfile.TemporaryDirectory() as tmpdir:
             os.chdir(tmpdir)
             test_file = os.path.join(tmpdir, "test.txt")
@@ -80,6 +81,7 @@ class TestFeinnCompleter:
             result = list(self.completer.get_completions(doc, MockCompleteEvent()))
             texts = [c.text for c in result]
             assert any("test" in t for t in texts)
+        os.chdir(orig_cwd)
 
     def test_no_completion_for_regular_word(self):
         doc = MockDocument("hello")

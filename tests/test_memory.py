@@ -48,20 +48,23 @@ class TestMemoryEntry:
 
         md = entry.to_markdown()
 
-        assert "# test" in md
-        assert "**Type**: note" in md
-        assert "**Description**: Test description" in md
-        assert "**Confidence**: 0.8" in md
+        assert "name: test" in md
+        assert "type: note" in md
+        assert "description: Test description" in md
+        assert "confidence: 0.8" in md
         assert "Test content" in md
 
     def test_from_markdown(self):
         """Test parsing from markdown."""
-        md = """# test-memory
-
-**Type**: feedback
-**Description**: Test description
-**Confidence**: 0.95
-
+        md = """---
+name: test-memory
+type: feedback
+description: Test description
+confidence: 0.95
+source: user
+last_used_at:
+conflict_group:
+---
 This is the memory content.
 It can span multiple lines.
 """
@@ -204,9 +207,17 @@ class TestMemorySearch:
     def test_search_by_keyword(self, temp_memory_dir):
         """Test searching memories by keyword."""
         # Create memories with different content
-        save_memory(name="python-tip", description="Python tip", type="code", content="Use list comprehensions", scope="user")
+        save_memory(
+            name="python-tip", description="Python tip", type="code", content="Use list comprehensions", scope="user"
+        )
         save_memory(name="git-tip", description="Git tip", type="workflow", content="Use git rebase", scope="user")
-        save_memory(name="another-python", description="More Python", type="code", content="Python decorators are useful", scope="user")
+        save_memory(
+            name="another-python",
+            description="More Python",
+            type="code",
+            content="Python decorators are useful",
+            scope="user",
+        )
 
         results = search_memory("python", scope="user")
 
@@ -232,19 +243,31 @@ class TestMemorySearch:
 
         assert len(results) == 0
 
-    def test_search_respects_scope(self, temp_memory_dir):
+    def test_search_respects_scope(self, tmp_path):
         """Test search only returns results from specified scope."""
-        save_memory(name="user-mem", description="User", type="note", content="User content", scope="user")
-        save_memory(name="project-mem", description="Project", type="note", content="Project content", scope="project")
+        # Use separate tmp dirs for user and project scopes
+        user_dir = tmp_path / "user"
+        project_dir = tmp_path / "project"
+        user_dir.mkdir()
+        project_dir.mkdir()
 
-        user_results = search_memory("content", scope="user")
-        project_results = search_memory("content", scope="project")
+        with patch(
+            "feinn_agent.memory.store._memory_dir",
+            side_effect=lambda scope: user_dir if scope == "user" else project_dir,
+        ):
+            save_memory(name="user-mem", description="User", type="note", content="User content", scope="user")
+            save_memory(
+                name="project-mem", description="Project", type="note", content="Project content", scope="project"
+            )
 
-        user_names = [r.name for r in user_results]
-        project_names = [r.name for r in project_results]
+            user_results = search_memory("content", scope="user")
+            project_results = search_memory("content", scope="project")
 
-        assert "user-mem" in user_names
-        assert "project-mem" not in user_names
+            user_names = [r.name for r in user_results]
+            project_names = [r.name for r in project_results]
 
-        assert "project-mem" in project_names
-        assert "user-mem" not in project_names
+            assert "user-mem" in user_names
+            assert "project-mem" not in user_names
+
+            assert "project-mem" in project_names
+            assert "user-mem" not in project_names

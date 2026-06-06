@@ -28,16 +28,19 @@ FeinnAgent aims to build an **enterprise-grade, multi-concurrency, scalable** AI
 
 | Provider | Type | Implementation |
 |----------|------|----------------|
-| OpenAI | Cloud | `providers.py` - OpenAIProvider |
-| Anthropic | Cloud | `providers.py` - AnthropicProvider |
-| Google Gemini | Cloud | `providers.py` - GeminiProvider |
-| DeepSeek | Cloud | `providers.py` - DeepSeekProvider |
-| SiliconFlow | Cloud | `providers.py` - SiliconFlowProvider |
-| Moonshot | Cloud | `providers.py` - MoonshotProvider |
-| Azure OpenAI | Cloud | `providers.py` - AzureOpenAIProvider |
-| vLLM | Local | `providers.py` - vLLMProvider |
-| Ollama | Local | `providers.py` - OllamaProvider |
-| LM Studio | Local | `providers.py` - LMStudioProvider |
+| OpenAI | Cloud | `providers.py` - OpenAI-compatible |
+| Anthropic | Cloud | `providers.py` - Anthropic native SDK |
+| Google Gemini | Cloud | `providers.py` - OpenAI-compatible |
+| DeepSeek | Cloud | `providers.py` - OpenAI-compatible |
+| SiliconFlow | Cloud | `providers.py` - OpenAI-compatible |
+| Moonshot | Cloud | `providers.py` - OpenAI-compatible |
+| Kimi | Cloud | `providers.py` - OpenAI-compatible |
+| Azure OpenAI | Cloud | `providers.py` - OpenAI-compatible |
+| OpenRouter | Cloud | `providers.py` - OpenAI-compatible |
+| vLLM | Local | `providers.py` - OpenAI-compatible |
+| Ollama | Local | `providers.py` - OpenAI-compatible |
+| LM Studio | Local | `providers.py` - OpenAI-compatible |
+| Custom | Any | `providers.py` - OpenAI-compatible (custom base_url) |
 
 ### 1.4 Reference Projects
 

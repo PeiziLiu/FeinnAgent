@@ -1,5 +1,7 @@
 # CLI TUI Enhancement — Requirements Document
 
+> Status: **Implemented** (src/feinn_agent/cli.py, src/feinn_agent/cli_tui.py, src/feinn_agent/display/)
+
 ## 1. 背景与动机
 
 当前 FeinnAgent CLI 使用 PromptSession（非 full-screen）进行交互，agent 在 asyncio 主循环中运行，输出直接写 stdout。存在的问题：

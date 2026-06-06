@@ -1,5 +1,7 @@
 # FeinnAgent 执行计划系统技术设计文档
 
+> 状态: **已实现** (src/feinn_agent/plan/, src/feinn_agent/checkpoint/, src/feinn_agent/trajectory/, src/feinn_agent/interrupt/)
+
 ## 1. 架构设计
 
 ### 1.1 整体架构

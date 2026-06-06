@@ -1,5 +1,7 @@
 # FeinnAgent 执行计划系统需求文档
 
+> 状态: **已实现** (src/feinn_agent/plan/, src/feinn_agent/checkpoint/, src/feinn_agent/trajectory/, src/feinn_agent/interrupt/)
+
 ## 1. 概述
 
 ### 1.1 项目背景

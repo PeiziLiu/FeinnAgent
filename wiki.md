@@ -21,7 +21,7 @@ FeinnAgent is an **enterprise-grade multi-concurrency AI Agent framework** built
 | Sub-Agent Collaboration | Concurrent sub-agent spawning for parallel task decomposition |
 | Dual-Scope Memory | Workspace-level and Agent-level memory isolation with persistence |
 | Skill System | Reusable prompt templates with triggers and parameter substitution |
-| Permission Control | Fine-grained tool permission management (auto/manual/accept-all) |
+| Permission Control | Fine-grained tool permission management (4 modes: accept-all/auto/manual/plan) |
 | MCP Integration | Native Model Context Protocol support for extended tool ecosystem |
 
 ---
@@ -157,9 +157,9 @@ Create `.md` files in `~/.feinn/skills/` or the project's `.feinn/skills/` direc
 ```bash
 git clone https://github.com/PeiziLiu/FeinnAgent.git
 cd feinn-agent
-python3.11 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
-python3.11 -m pip install -e .
+python3 -m pip install -e .
 cp .env.example .env
 # Edit .env to configure your API keys
 ```
@@ -227,7 +227,7 @@ feinn --serve
 | `AZURE_OPENAI_API_KEY` | Azure OpenAI key | `...` |
 | `VLLM_BASE_URL` | vLLM service URL | `http://localhost:8000/v1` |
 | `LOG_LEVEL` | Log level | `INFO` / `DEBUG` |
-| `PERMISSION_MODE` | Permission mode | `accept_all` / `auto` / `manual` |
+| `PERMISSION_MODE` | Permission mode | `accept-all` / `auto` / `manual` / `plan` |
 
 ---
 

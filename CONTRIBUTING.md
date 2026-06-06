@@ -38,7 +38,7 @@ cd FeinnAgent
 git remote add upstream https://github.com/PeiziLiu/FeinnAgent.git
 
 # 4. Create virtual environment
-python3.11 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate  # Linux/macOS
 # or: .venv\Scripts\activate  # Windows
 

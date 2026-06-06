@@ -1,7 +1,7 @@
 # FeinnAgent 闭环学习系统 — 技术设计文档
 
-> 版本: v0.1.0  
-> 状态: 草案
+> 版本: v1.0.0  
+> 状态: **已实现** (src/feinn_agent/learning/)
 
 ---
 

@@ -2,8 +2,8 @@
 
 > 参考实现: CheetahClaws  
 > 工程方法论: Harness Engineering  
-> 版本: v1.1.0  
-> 状态: 草案
+> 版本: v1.0.0  
+> 状态: **已实现** (src/feinn_agent/tools/process.py, tmux.py, diagnostics.py, output.py)
 
 ---
 
